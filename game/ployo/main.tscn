@@ -1,0 +1,39 @@
+[gd_scene format=3 uid="uid://ployomain"]
+
+[ext_resource type="Script" uid="uid://dvsmgsr05cjtr" path="res://src/main.gd" id="1_main"]
+[ext_resource type="Script" uid="uid://c6xv6upamfwep" path="res://src/fly_camera.gd" id="2_cam"]
+
+[sub_resource type="ProceduralSkyMaterial" id="sky_mat"]
+sky_top_color = Color(0.25, 0.45, 0.75, 1)
+sky_horizon_color = Color(0.64, 0.65, 0.67, 1)
+ground_bottom_color = Color(0.2, 0.17, 0.13, 1)
+ground_horizon_color = Color(0.64, 0.65, 0.67, 1)
+
+[sub_resource type="Sky" id="sky"]
+sky_material = SubResource("sky_mat")
+
+[sub_resource type="Environment" id="env"]
+background_mode = 2
+sky = SubResource("sky")
+ambient_light_source = 3
+ambient_light_color = Color(0.7, 0.75, 0.85, 1)
+ambient_light_energy = 0.5
+tonemap_mode = 3
+ssao_enabled = true
+glow_enabled = true
+
+[node name="Main" type="Node3D" unique_id=1555135570]
+script = ExtResource("1_main")
+
+[node name="Camera3D" type="Camera3D" parent="." unique_id=1292394623]
+transform = Transform3D(1, 0, 0, 0, 0.81915206, 0.57357645, 0, -0.57357645, 0.81915206, 0, 80, 150)
+far = 2000.0
+script = ExtResource("2_cam")
+
+[node name="Sun" type="DirectionalLight3D" parent="." unique_id=1224553854]
+transform = Transform3D(0.8660254, 0.38302222, -0.32139382, 0, 0.64278764, 0.76604444, 0.5, -0.66341394, 0.5566704, 0, 0, 0)
+light_energy = 1.5
+shadow_enabled = true
+
+[node name="WorldEnvironment" type="WorldEnvironment" parent="." unique_id=1496865170]
+environment = SubResource("env")
