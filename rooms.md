@@ -1,34 +1,34 @@
 ## core rooms (always spawn, at least one)
 
-engine room	(has cooling pipes etc)
-power room	(has a generator, breaker panel, fuse box etc)
-fuel bay and bilge	(fuel tanks, pump, valves, water gauge, etc. can flood or fuel pump can fail)
-galley	    (stove, fridge, water tank, pantry)
-storage  	(crates, shelves, tools. some for players. some stuff which "needs to reach home safe")
+- engine room	(has cooling pipes etc)
+- power room	(has a generator, breaker panel, fuse box etc)
+- fuel bay and bilge	(fuel tanks, pump, valves, water gauge, etc. can flood or fuel pump can fail)
+- galley	    (stove, fridge, water tank, pantry)
+- storage  	(crates, shelves, tools. some for players. some stuff which "needs to reach home safe")
 
 ## support rooms (random spawn)
 
-morgue
-server room
-bathroom
-cafeteria
-passenger bedrooms
-crew quarters
-med bay (mabi later. carry a friend here n heal them)
-library
+- morgue
+- server room
+- bathroom
+- cafeteria
+- passenger bedrooms
+- crew quarters
+- med bay (mabi later. carry a friend here n heal them)
+- library
 
 ## layers
 
-l5  surface        <- open sky
-l4  upper deck
-l3  mid deck
-l2  lower deck
-l1  bilge          <- bottommost, water collects
+- l5  surface        <- open sky
+- l4  upper deck
+- l3  mid deck
+- l2  lower deck
+- l1  bilge          <- bottommost, water collects
 
 ### constraints
 
-fuel bay & bilge -> l1 
-engine room -> l1 or l2
+- fuel bay & bilge -> l1 
+- engine room -> l1 or l2
 
 everything else is flexible
 
