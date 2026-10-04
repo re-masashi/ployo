@@ -19,15 +19,13 @@ ambient_light_source = 3
 ambient_light_color = Color(0.7, 0.75, 0.85, 1)
 ambient_light_energy = 0.5
 tonemap_mode = 3
-ssao_enabled = true
-glow_enabled = true
 
 [node name="Main" type="Node3D" unique_id=1555135570]
 script = ExtResource("1_main")
 
 [node name="Camera3D" type="Camera3D" parent="." unique_id=1292394623]
 transform = Transform3D(1, 0, 0, 0, 0.81915206, 0.57357645, 0, -0.57357645, 0.81915206, 0, 80, 150)
-far = 2000.0
+far = 400.0
 script = ExtResource("2_cam")
 
 [node name="Sun" type="DirectionalLight3D" parent="." unique_id=1224553854]

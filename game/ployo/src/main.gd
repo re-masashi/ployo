@@ -2,6 +2,9 @@ extends Node3D
 
 @export var seed_value: int = 1
 @export var support_room_count: int = 8
+@export var spawn_test_player := true
+@export var spawn_layer := 4
+@export var world_scale := 1.0 / 3.0
 
 func _ready() -> void:
 	var ship := ShipOutline.new()
@@ -9,7 +12,22 @@ func _ready() -> void:
 	gen.generate()
 
 	var builder := ShipBuilder.new(ship, gen)
-	add_child(builder.build())
+	var built := builder.build()
+	built.scale = Vector3.ONE * world_scale
+	add_child(built)
+
+	if spawn_test_player:
+		var fly_cam := get_node_or_null("Camera3D")
+		if fly_cam != null:
+			fly_cam.current = false
+		var layer := clampi(spawn_layer, 1, 4)
+		var cz := 60.0
+		for c in gen.corridors:
+			if c["layer"] == layer:
+				cz = (float(c["z_min"]) + float(c["z_max"])) * 0.5
+		var player := TestPlayer.new()
+		player.position = Vector3(0, (ShipBuilder.LAYER_Y[layer - 1] + 1.0) * world_scale, cz * world_scale)
+		add_child(player)
 
 	_print_layout(gen)
 	_check_hull_fit(ship, gen)
@@ -24,11 +42,12 @@ func _check_hull_fit(ship: ShipOutline, gen: RoomGenerator) -> void:
 	if mesh_halfwidths.is_empty():
 		print("WARNING: could not sample ship.glb mesh")
 	for room in gen.rooms:
+		var rc: Vector2 = room["center"]
 		var room_rect := Rect2(
-			room["center"].x - room["half_w"],
-			room["center"].y - room["half_d"],
-			room["half_w"] * 2,
-			room["half_d"] * 2)
+			(rc.x - room["half_w"]) * world_scale,
+			(rc.y - room["half_d"]) * world_scale,
+			room["half_w"] * 2 * world_scale,
+			room["half_d"] * 2 * world_scale)
 		var ok_outline := ShipOutline.contains_rect(full_outline, room["center"], room["half_w"], room["half_d"])
 		var ok_mesh := true
 		if not mesh_halfwidths.is_empty():

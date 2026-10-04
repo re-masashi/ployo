@@ -470,27 +470,57 @@ func _halfwidth_at(poly: Array[Vector2], z: float) -> float:
 	return max_hw
 
 func _place_stairs(poly: Array[Vector2], bounds: Rect2, layer: int) -> void:
-	var z_min := bounds.position.y + 10.0
-	var z_max := bounds.end.y - 10.0
-	if z_max <= z_min:
+	var layer_rooms: Array[Dictionary] = []
+	for room in rooms:
+		if room["layer"] == layer:
+			layer_rooms.append(room)
+	if layer_rooms.is_empty():
 		return
 
-	var stair_count := 2
-	var z_range := z_max - z_min
-	var step := z_range / (stair_count + 1)
+	var rises := [12.0, 12.0, 18.0, 18.0]
+	var rise: float = rises[layer - 1]
+	var target_slope := 1.0
+	var half_d: float = (rise / target_slope) * 0.5
+	var half_w: float = 2.5
+	var margin := 1.0
 
-	for i in stair_count:
-		var z := z_min + step * (i + 1) + _rng.randf_range(-step * 0.2, step * 0.2)
-		z = clampf(z, z_min, z_max)
-		var hw := _halfwidth_at(poly, z)
-		if hw < CORRIDOR_HALF + 4.0:
-			z = (z_min + z_max) / 2.0
-		stairs.append({
-			"from_layer": layer,
-			"center": Vector2(0, z),
-			"half_w": 2.5,
-			"half_d": 2.5,
-		})
+	var next_poly := poly if layer >= 4 else _ship.get_layer_polygon(layer + 1)
+
+	var preferred_side := 1 if layer % 2 == 1 else -1
+	for side in [preferred_side, -preferred_side]:
+		for room in layer_rooms:
+			var room_hw: float = room["half_w"]
+			var room_hd: float = room["half_d"]
+			if room_hw * 2.0 < half_w * 2.0 + margin * 2.0:
+				continue
+			if room_hd * 2.0 < half_d * 2.0 + margin * 2.0:
+				continue
+
+			var room_cx: float = room["center"].x
+			var room_cz: float = room["center"].y
+			var room_side: int = 1 if room_cx > 0.0 else -1
+			if room_side != side:
+				continue
+
+			var stair_cx: float = side * (CORRIDOR_HALF + half_w + margin)
+			var z_end: float = room_hd - half_d - margin
+			var stair_cz: float = room_cz + z_end
+
+			var center := Vector2(stair_cx, stair_cz)
+			if not ShipOutline.contains_rect(poly, center, half_w, half_d):
+				continue
+			if not ShipOutline.contains_rect(next_poly, center, half_w, half_d):
+				continue
+
+			stairs.append({
+				"from_layer": layer,
+				"center": center,
+				"half_w": half_w,
+				"half_d": half_d,
+			})
+			break
+		if stairs.size() > 0 and stairs.back()["from_layer"] == layer:
+			break
 
 func _place_ladders(layer: int) -> void:
 	var layer_rooms: Array[int] = []
