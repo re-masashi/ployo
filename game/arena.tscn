@@ -5,6 +5,7 @@
 [ext_resource type="Material" uid="uid://620h7d78t8mk" path="res://materials/kenney_prototype-textures/Purple/texture_01.tres" id="3_purple"]
 [ext_resource type="Material" uid="uid://v7a7plinpmab" path="res://materials/kenney_prototype-textures/Light/texture_01.tres" id="4_light"]
 [ext_resource type="Texture2D" uid="uid://duyeybtlls0ih" path="res://assets/Skyboxes/skybox-day.png" id="5_sky"]
+[ext_resource type="PackedScene" uid="uid://cynn6fc46qob3" path="res://player.tscn" id="6_sbb53"]
 
 [sub_resource type="PanoramaSkyMaterial" id="PanoramaSkyMaterial_arena"]
 panorama = ExtResource("5_sky")
@@ -331,3 +332,6 @@ shape = SubResource("BoxShape_Floor")
 [node name="MeshInstance3D" type="MeshInstance3D" parent="Floor" unique_id=900000002]
 material_override = ExtResource("1_green")
 mesh = SubResource("BoxMesh_Floor")
+
+[node name="CharacterBody3D" parent="." unique_id=601084684 instance=ExtResource("6_sbb53")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 6.514459, 2.1507792, 0)

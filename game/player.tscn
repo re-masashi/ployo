@@ -1,0 +1,15 @@
+[gd_scene format=3 uid="uid://cynn6fc46qob3"]
+
+[ext_resource type="Script" uid="uid://b8dfbjd8tkpxt" path="res://src/char_controller.gd" id="1_i25i0"]
+
+[sub_resource type="CapsuleShape3D" id="CapsuleShape3D_6mibh"]
+
+[node name="CharacterBody3D" type="CharacterBody3D" unique_id=601084684]
+collision_layer = 2
+script = ExtResource("1_i25i0")
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="." unique_id=183702783]
+shape = SubResource("CapsuleShape3D_6mibh")
+
+[node name="Camera3D" type="Camera3D" parent="." unique_id=90068370]
+unique_name_in_owner = true
