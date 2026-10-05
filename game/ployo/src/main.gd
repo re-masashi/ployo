@@ -1,12 +1,23 @@
 extends Node3D
 
+@export var randomize_seed := true
 @export var seed_value: int = 1
 @export var support_room_count: int = 8
 @export var spawn_test_player := true
 @export var spawn_layer := 4
 @export var world_scale := 1.0 / 3.0
+@export var debug_layout := false
+@export var debug_hull_fit := false
+@export var fly_toggle_key := KEY_F
+
+var _player: TestPlayer
+var _fly_cam: Camera3D
+var _flying := false
 
 func _ready() -> void:
+	if randomize_seed:
+		seed_value = randi()
+	print("seed: %d" % seed_value)
 	var ship := ShipOutline.new()
 	var gen := RoomGenerator.new(ship, seed_value, support_room_count)
 	gen.generate()
@@ -16,21 +27,76 @@ func _ready() -> void:
 	built.scale = Vector3.ONE * world_scale
 	add_child(built)
 
-	if spawn_test_player:
-		var fly_cam := get_node_or_null("Camera3D")
-		if fly_cam != null:
-			fly_cam.current = false
-		var layer := clampi(spawn_layer, 1, 4)
-		var cz := 60.0
-		for c in gen.corridors:
-			if c["layer"] == layer:
-				cz = (float(c["z_min"]) + float(c["z_max"])) * 0.5
-		var player := TestPlayer.new()
-		player.position = Vector3(0, (ShipBuilder.LAYER_Y[layer - 1] + 1.0) * world_scale, cz * world_scale)
-		add_child(player)
+	_fly_cam = get_node_or_null("Camera3D")
+	if _fly_cam != null:
+		_fly_cam.current = false
+		_fly_cam.set_process(false)
 
-	_print_layout(gen)
-	_check_hull_fit(ship, gen)
+	if spawn_test_player:
+		var layer := clampi(spawn_layer, 1, 4)
+		var spawn := _find_safe_spawn(gen, layer)
+		_player = TestPlayer.new()
+		_player.position = spawn
+		add_child(_player)
+
+	if debug_layout:
+		_print_layout(gen)
+	if debug_hull_fit:
+		_check_hull_fit(ship, gen)
+
+func _find_safe_spawn(gen: RoomGenerator, layer: int) -> Vector3:
+	var world_scale := 1.0 / 3.0
+	var deck_y: float = ShipBuilder.LAYER_Y[layer - 1] * world_scale
+	var holes: Array[Rect2] = ShipBuilder.deck_holes_for_layer(layer, gen.stairs, gen.ladders, gen.rooms)
+	var candidates: Array[Vector2] = []
+	for c in gen.corridors:
+		if int(c["layer"]) != layer:
+			continue
+		var z0 := float(c["z_min"])
+		var z1 := float(c["z_max"])
+		for i in 9:
+			var t := (float(i) + 0.5) / 9.0
+			candidates.append(Vector2(0.0, lerpf(z0, z1, t)))
+	if candidates.is_empty():
+		candidates.append(Vector2(0.0, 60.0))
+
+	var best := candidates[0]
+	var best_score := -INF
+	for p in candidates:
+		var score := INF
+		for h in holes:
+			var closest := Vector2(
+				clampf(p.x, h.position.x, h.end.x),
+				clampf(p.y, h.position.y, h.end.y))
+			score = minf(score, p.distance_to(closest))
+		if score > best_score:
+			best_score = score
+			best = p
+		if best_score > 3.0:
+			break
+	return Vector3(best.x * world_scale, deck_y + 1.5, best.y * world_scale)
+
+func _unhandled_input(event: InputEvent) -> void:
+	if event is InputEventKey and event.pressed and not event.echo:
+		if event.keycode == fly_toggle_key:
+			_toggle_fly()
+
+func _toggle_fly() -> void:
+	if _player == null or _fly_cam == null:
+		return
+	_flying = not _flying
+	if _flying:
+		_fly_cam.global_transform = _player.global_transform
+		_fly_cam.fov = 78.0
+		_fly_cam.current = true
+		_fly_cam.set_process(true)
+		_player.set_camera_current(false)
+		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
+	else:
+		_fly_cam.current = false
+		_fly_cam.set_process(false)
+		_player.set_camera_current(true)
+		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 
 func _check_hull_fit(ship: ShipOutline, gen: RoomGenerator) -> void:
 	var full_outline := ship.get_outline()

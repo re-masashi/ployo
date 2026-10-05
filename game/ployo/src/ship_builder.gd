@@ -9,6 +9,7 @@ const DOOR_MARGIN := 1.0
 const WALL_SINK := 0.1
 const WALL_TOP_GAP := 0.05
 const STEP_EPS := 0.05
+const DECK_THICKNESS := 0.5
 
 static func ladder_top_xz(ladder: Dictionary, room: Dictionary) -> Vector2:
 	match int(ladder["side"]):
@@ -213,17 +214,95 @@ func _build_deck(root: Node3D, layer: int) -> void:
 	if indices.is_empty():
 		return
 
+	var tris: Array[PackedInt32Array] = []
+	for i in range(0, indices.size(), 3):
+		var a := indices[i]
+		var b := indices[i + 1]
+		var c := indices[i + 2]
+		if a == b or b == c or a == c:
+			continue
+		var t := PackedInt32Array([a, b, c])
+		if _tri_signed_area(pts2[a], pts2[b], pts2[c]) > 0.0:
+			t = PackedInt32Array([a, c, b])
+		if absf(_tri_signed_area(pts2[t[0]], pts2[t[1]], pts2[t[2]])) < 1e-10:
+			continue
+		tris.append(t)
+
+	if tris.is_empty():
+		return
+
+	var y_bot: float = y - DECK_THICKNESS
 	var verts := PackedVector3Array()
 	var normals := PackedVector3Array()
+	var top_base := 0
 	for p in pts2:
 		verts.append(Vector3(p.x, y, p.y))
 		normals.append(Vector3.UP)
+
+	var bottom_base := verts.size()
+	for p in pts2:
+		verts.append(Vector3(p.x, y_bot, p.y))
+		normals.append(Vector3.DOWN)
+
+	var top_indices := PackedInt32Array()
+	var bottom_indices := PackedInt32Array()
+	for t in tris:
+		top_indices.append(top_base + t[0])
+		top_indices.append(top_base + t[1])
+		top_indices.append(top_base + t[2])
+		bottom_indices.append(bottom_base + t[0])
+		bottom_indices.append(bottom_base + t[2])
+		bottom_indices.append(bottom_base + t[1])
+
+	var render_indices := PackedInt32Array()
+	render_indices.append_array(top_indices)
+	render_indices.append_array(bottom_indices)
+
+	for i in poly.size():
+		var a2: Vector2 = poly[i]
+		var b2: Vector2 = poly[(i + 1) % poly.size()]
+		var ta := Vector3(a2.x, y, a2.y)
+		var tb := Vector3(b2.x, y, b2.y)
+		var ba := Vector3(a2.x, y_bot, a2.y)
+		var bb := Vector3(b2.x, y_bot, b2.y)
+		var edge := (tb - ta).normalized() if tb.distance_squared_to(ta) > 1e-12 else Vector3.RIGHT
+		var n := Vector3(edge.z, 0.0, -edge.x)
+		var base := verts.size()
+		verts.append_array([ta, tb, bb, ba])
+		for _k in 4:
+			normals.append(n)
+		render_indices.append_array([base, base + 2, base + 1, base, base + 3, base + 2])
+	for hole in holes:
+		var corners := [
+			Vector3(hole.position.x, y, hole.position.y),
+			Vector3(hole.end.x, y, hole.position.y),
+			Vector3(hole.end.x, y, hole.end.y),
+			Vector3(hole.position.x, y, hole.end.y),
+		]
+		var corners_bot := [
+			Vector3(hole.position.x, y_bot, hole.position.y),
+			Vector3(hole.end.x, y_bot, hole.position.y),
+			Vector3(hole.end.x, y_bot, hole.end.y),
+			Vector3(hole.position.x, y_bot, hole.end.y),
+		]
+		for e in 4:
+			var t0: Vector3 = corners[e]
+			var t1: Vector3 = corners[(e + 1) % 4]
+			var b0: Vector3 = corners_bot[e]
+			var b1: Vector3 = corners_bot[(e + 1) % 4]
+			var e2 := (t1 - t0).normalized() if t1.distance_squared_to(t0) > 1e-12 else Vector3.RIGHT
+			var n2 := Vector3(-e2.z, 0.0, e2.x)
+			var base2 := verts.size()
+			verts.append_array([t0, t1, b1, b0])
+			for _k in 4:
+				normals.append(n2)
+			render_indices.append_array([base2, base2 + 2, base2 + 1, base2, base2 + 3, base2 + 2])
 
 	var arrays := []
 	arrays.resize(Mesh.ARRAY_MAX)
 	arrays[Mesh.ARRAY_VERTEX] = verts
 	arrays[Mesh.ARRAY_NORMAL] = normals
-	arrays[Mesh.ARRAY_INDEX] = indices
+	arrays[Mesh.ARRAY_INDEX] = render_indices
 
 	var mesh := ArrayMesh.new()
 	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
@@ -231,9 +310,11 @@ func _build_deck(root: Node3D, layer: int) -> void:
 	var mi := MeshInstance3D.new()
 	mi.name = "Deck%d" % layer
 	mi.mesh = mesh
+	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
 	var mat := StandardMaterial3D.new()
 	mat.albedo_color = Color(0.22, 0.22, 0.25)
 	mat.roughness = 0.85
+	mat.cull_mode = BaseMaterial3D.CULL_DISABLED
 	mi.material_override = mat
 	root.add_child(mi)
 
@@ -243,13 +324,22 @@ func _build_deck(root: Node3D, layer: int) -> void:
 	var shape := ConcavePolygonShape3D.new()
 	var faces := PackedVector3Array()
 	for i in range(0, indices.size(), 3):
-		faces.append(verts[indices[i]])
-		faces.append(verts[indices[i + 1]])
-		faces.append(verts[indices[i + 2]])
+		var a := verts[top_base + indices[i]]
+		var b := verts[top_base + indices[i + 1]]
+		var c := verts[top_base + indices[i + 2]]
+		faces.append(a)
+		faces.append(b)
+		faces.append(c)
+		faces.append(a)
+		faces.append(c)
+		faces.append(b)
 	shape.set_faces(faces)
 	col.shape = shape
 	body.add_child(col)
 	root.add_child(body)
+
+static func _tri_signed_area(a: Vector2, b: Vector2, c: Vector2) -> float:
+	return 0.5 * ((b.x - a.x) * (c.y - a.y) - (c.x - a.x) * (b.y - a.y))
 
 func _build_walls(root: Node3D, layer: int) -> void:
 	var walls_node := Node3D.new()
@@ -350,7 +440,7 @@ func _emit_box(parent: Node3D, batches: Dictionary, key: String, mat: Material, 
 	body.add_child(col)
 	parent.add_child(body)
 
-func _flush_batches(parent: Node3D, batches: Dictionary) -> void:
+func _flush_batches(parent: Node3D, batches: Dictionary, cast_shadow := GeometryInstance3D.SHADOW_CASTING_SETTING_ON) -> void:
 	for key in batches:
 		var verts := PackedVector3Array()
 		var normals := PackedVector3Array()
@@ -380,6 +470,7 @@ func _flush_batches(parent: Node3D, batches: Dictionary) -> void:
 		var mi := MeshInstance3D.new()
 		mi.mesh = mesh
 		mi.material_override = batches[key]["mat"]
+		mi.cast_shadow = cast_shadow
 		parent.add_child(mi)
 
 func _build_stairs(root: Node3D, layer: int) -> void:
@@ -467,20 +558,74 @@ func _build_lights(root: Node3D) -> void:
 	lights_node.name = "Lights"
 	root.add_child(lights_node)
 
+	var fixture_mat := StandardMaterial3D.new()
+	fixture_mat.albedo_color = Color(0.12, 0.12, 0.13)
+	fixture_mat.roughness = 0.55
+	fixture_mat.metallic = 0.65
+
+	var bulb_mat := StandardMaterial3D.new()
+	bulb_mat.albedo_color = Color(0.08, 0.08, 0.09)
+	bulb_mat.emission_enabled = true
+	bulb_mat.emission = Color(1.0, 0.88, 0.68)
+	bulb_mat.emission_energy_multiplier = 2.8
+	bulb_mat.roughness = 0.4
+	bulb_mat.metallic = 0.2
+
+	var fixture_batches := {
+		"fixture": {"mat": fixture_mat, "boxes": []},
+		"bulb": {"mat": bulb_mat, "boxes": []},
+	}
+
 	for layer in range(1, 5):
-		var lamp_y: float = LAYER_Y[layer] - 1.5
+		var lamp_y: float = LAYER_Y[layer] - 2.5
+		var floor_h: float = LAYER_Y[layer] - LAYER_Y[layer - 1]
+		var max_range: float = floor_h * 1.6
+		var fixture_y: float = LAYER_Y[layer] - DECK_THICKNESS - 0.25
+		var bulb_y: float = LAYER_Y[layer] - DECK_THICKNESS - 0.45
 		for corr in _gen.corridors:
 			if corr["layer"] != layer:
 				continue
 			var length: float = float(corr["z_max"]) - float(corr["z_min"])
-			var count := clampi(ceili(length / 50.0), 2, 5)
+			var count := clampi(ceili(length / 40.0), 2, 5)
 			var spacing := length / float(count)
 			for k in count:
-				var lamp := OmniLight3D.new()
-				lamp.position = Vector3(0, lamp_y, float(corr["z_min"]) + spacing * (float(k) + 0.5))
-				lamp.light_color = Color(1.0, 0.96, 0.88)
-				lamp.light_energy = 1.4
-				lamp.omni_range = spacing * 0.5 + 10.0
-				lamp.omni_attenuation = 1.5
-				lamp.shadow_enabled = false
-				lights_node.add_child(lamp)
+				_add_lamp(lights_node, fixture_batches, layer, k,
+					Vector3(0, lamp_y, float(corr["z_min"]) + spacing * (float(k) + 0.5)),
+					spacing, max_range, fixture_y, bulb_y)
+		for room in _gen.rooms:
+			if int(room["layer"]) != layer:
+				continue
+			var room_d: float = float(room["half_d"]) * 2.0
+			var rcount := clampi(ceili(room_d / 40.0), 1, 3)
+			var rspacing := room_d / float(rcount)
+			var cx: float = (room["center"] as Vector2).x
+			var cz0: float = (room["center"] as Vector2).y - float(room["half_d"])
+			for k in rcount:
+				_add_lamp(lights_node, fixture_batches, layer, k,
+					Vector3(cx, lamp_y, cz0 + rspacing * (float(k) + 0.5)),
+					rspacing, max_range, fixture_y, bulb_y)
+
+	_flush_batches(lights_node, fixture_batches, GeometryInstance3D.SHADOW_CASTING_SETTING_OFF)
+
+func _add_lamp(lights_node: Node3D, fixture_batches: Dictionary, layer: int, k: int,
+		pos: Vector3, spacing: float, max_range: float, fixture_y: float, bulb_y: float) -> void:
+	var lamp := SpotLight3D.new()
+	lamp.position = pos
+	lamp.rotation_degrees = Vector3(-90, 0, 0)
+	var warmth := 0.04 * sin(float(k) * 1.7 + float(layer))
+	lamp.light_color = Color(1.0, 0.88 + warmth * 0.3, 0.72 + warmth)
+	lamp.light_energy = 3.0
+	lamp.spot_range = minf(spacing * 0.55 + 8.0, max_range)
+	lamp.spot_angle = 60.0
+	lamp.spot_attenuation = 1.1
+	lamp.shadow_enabled = true
+	lights_node.add_child(lamp)
+
+	(fixture_batches["fixture"]["boxes"] as Array).append({
+		"size": Vector3(1.4, 0.18, 2.2),
+		"pos": Vector3(pos.x, fixture_y, pos.z),
+	})
+	(fixture_batches["bulb"]["boxes"] as Array).append({
+		"size": Vector3(1.0, 0.08, 1.8),
+		"pos": Vector3(pos.x, bulb_y, pos.z),
+	})
