@@ -1,0 +1,51 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://src/items/grabbable.gd" id="1_grab"]
+[ext_resource type="Material" uid="uid://b6kl28tys01ul" path="res://materials/kenney_prototype-textures/Orange/texture_01.tres" id="2_orange"]
+
+[sub_resource type="BoxShape3D" id="BoxShape_crate"]
+size = Vector3(0.7, 0.7, 0.7)
+
+[sub_resource type="BoxMesh" id="BoxMesh_crate"]
+size = Vector3(0.7, 0.7, 0.7)
+
+[sub_resource type="PhysicsMaterial" id="PhysicsMaterial_crate"]
+friction = 0.8
+bounce = 0.3
+
+[sub_resource type="SceneReplicationConfig" id="SceneReplicationConfig_crate"]
+properties/0/path = NodePath(".:position")
+properties/0/spawn = true
+properties/0/replication_mode = 1
+properties/1/path = NodePath(".:rotation")
+properties/1/spawn = true
+properties/1/replication_mode = 1
+properties/2/path = NodePath(".:is_secured")
+properties/2/spawn = true
+properties/2/replication_mode = 1
+properties/3/path = NodePath(".:is_broken")
+properties/3/spawn = true
+properties/3/replication_mode = 1
+
+[node name="CrateMedium" type="RigidBody3D"]
+mass = 15.0
+physics_material_override = SubResource("PhysicsMaterial_crate")
+contact_monitor = true
+max_contacts_reported = 4
+script = ExtResource("1_grab")
+weight_kg = 15.0
+value = 250
+max_hp = 60.0
+break_impact_speed = 7.0
+fragility = 8.0
+carry_speed_factor = 0.6
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="."]
+shape = SubResource("BoxShape_crate")
+
+[node name="Mesh" type="MeshInstance3D" parent="."]
+material_override = ExtResource("2_orange")
+mesh = SubResource("BoxMesh_crate")
+
+[node name="MultiplayerSynchronizer" type="MultiplayerSynchronizer" parent="."]
+replication_config = SubResource("SceneReplicationConfig_crate")

@@ -1,9 +1,9 @@
 extends CharacterBody3D
 
-## each peer owns its own body (client-owned),
-## host only manages spawning. identity (name + color) is derived
-## deterministically from the multiplayer authority id. every peer
-## computes the same visuals without extra RPCs.
+enum StatusState { NORMAL, STUNNED }
+enum LocoState { GROUNDED, AIRBORNE }
+enum StanceState { STAND, SPRINT, CROUCH }
+enum HandsState { EMPTY, GRABBING, CARRYING, THROWING }
 
 const PALETTE: Array[Color] = [
 	Color(0.95, 0.35, 0.25),
@@ -14,8 +14,42 @@ const PALETTE: Array[Color] = [
 	Color(0.95, 0.55, 0.20),
 ]
 
+const BASE_SPEED := 4.0
+const SPRINT_MULT := 1.6
+const CROUCH_MULT := 0.5
+const CROUCH_HEIGHT_FACTOR := 0.6
+const STAND_CAPSULE_HEIGHT := 2.0
+const GRAVITY := 18.0
+const JUMP_EMPTY := 4.5
+const JUMP_LIGHT := 3.5
+const JUMP_MED := 2.5
+const GRAB_LIFT_TIME := 0.12
+const THROW_BASE := 9.0
+const THROW_MIN := 4.0
+const THROW_MAX := 12.0
+const THROW_CD := 0.4
+const THROW_STATE_TIME := 0.1
+const STUN_TIME := 2.0
+const CARRY_DEFAULT_DIST := 1.4
+
 var player_name := "Player"
 var player_color := Color(0.25, 0.55, 0.95)
+
+var status: StatusState = StatusState.NORMAL
+var loco: LocoState = LocoState.GROUNDED
+var stance: StanceState = StanceState.STAND
+var hands: HandsState = HandsState.EMPTY
+var carried_item: Grabbable = null
+var carry_distance := CARRY_DEFAULT_DIST
+var carry_yaw := 0.0
+var carry_pitch := 0.0
+
+var _stun_t := 0.0
+var _grab_t := 0.0
+var _throw_t := 0.0
+var _throw_cd := 0.0
+var _grab_pending := false
+var _pending_t := 0.0
 
 static func spawn_position_for(peer_id: int, marks: Array) -> Vector3:
 	if marks.is_empty():
@@ -28,9 +62,11 @@ static func spawn_position_for(peer_id: int, marks: Array) -> Vector3:
 	return m.global_position + jitter
 
 @onready var _cam: Camera3D = %Camera3D
+@onready var _anchor: Marker3D = %CarryAnchor
+@onready var _ray: RayCast3D = %GrabRay
 @onready var _body: MeshInstance3D = $Body
 @onready var _tag: Label3D = $NameTag
-@onready var _sync: MultiplayerSynchronizer = $MultiplayerSynchronizer
+@onready var _col: CollisionShape3D = $CollisionShape3D
 
 
 func _enter_tree() -> void:
@@ -45,8 +81,9 @@ func _ready() -> void:
 	player_name = "Player%d" % oid
 	player_color = PALETTE[absi(oid) % PALETTE.size()]
 	_apply_identity()
+	_ray.add_exception(self)
+	_col.shape = _col.shape.duplicate()
 	if is_multiplayer_authority():
-		# owner places itself deterministically; everyone else syncs
 		var marks := get_tree().get_nodes_in_group("spawn_points")
 		position = spawn_position_for(oid, marks)
 		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
@@ -72,17 +109,344 @@ func _apply_identity() -> void:
 	_body.set_surface_override_material(0, mat)
 
 
-func _process(_delta: float) -> void:
+func can_sprint() -> bool:
+	return status == StatusState.NORMAL and stance != StanceState.CROUCH and hands == HandsState.EMPTY
+
+func hands_empty() -> bool:
+	return hands == HandsState.EMPTY
+
+func speed_factor() -> float:
+	if carried_item != null:
+		return carried_item.carry_speed_factor
+	return 1.0
+
+func _jump_velocity() -> float:
+	if carried_item == null:
+		return JUMP_EMPTY
+	if carried_item.weight_kg <= 8.0:
+		return JUMP_LIGHT
+	if carried_item.weight_kg <= 20.0:
+		return JUMP_MED
+	return 0.0
+
+
+func try_grab_target(item: Grabbable) -> bool:
+	if hands != HandsState.EMPTY:
+		return false
+	if status != StatusState.NORMAL:
+		return false
+	if _throw_cd > 0.0:
+		return false
+	if _grab_pending:
+		return false
+	if item == null or not item.can_grab():
+		return false
+	_server_or_direct_grab(item)
+	return true
+
+
+func place_carried() -> void:
+	if hands != HandsState.CARRYING and hands != HandsState.GRABBING:
+		return
+	if carried_item == null:
+		return
+	var item := carried_item
+	var spot := _find_place_position(item)
+	if not spot[1]:
+		print("[Hands] no room to place ", item.name)
+		return
+	item.global_position = spot[0]
+	_server_or_direct_release(item, false, Vector3.ZERO)
+
+
+func throw_carried() -> void:
+	if hands != HandsState.CARRYING and hands != HandsState.GRABBING:
+		return
+	if carried_item == null:
+		return
+	var item := carried_item
+	var dir := -_cam.global_transform.basis.z
+	var power := clampf(THROW_BASE * 5.0 / maxf(item.weight_kg, 1.0), THROW_MIN, THROW_MAX)
+	var impulse := (dir * 0.85 + Vector3.UP * 0.5).normalized() * power * item.mass
+	_server_or_direct_release(item, true, impulse)
+	hands = HandsState.THROWING
+	_throw_t = THROW_STATE_TIME
+	_throw_cd = THROW_CD
+
+
+func apply_stun(duration: float = STUN_TIME) -> void:
+	status = StatusState.STUNNED
+	_stun_t = maxf(_stun_t, duration)
+	velocity.x = 0.0
+	velocity.z = 0.0
+	if hands == HandsState.CARRYING or hands == HandsState.GRABBING:
+		var item := carried_item
+		if item != null:
+			var fling := Vector3(randf_range(-1.0, 1.0), 1.5, randf_range(-1.0, 1.0))
+			_server_or_direct_release(item, true, fling)
+			hands = HandsState.EMPTY
+			print("[Hands] stunned, dropped ", item.name)
+
+
+func _my_id() -> int:
+	return get_multiplayer_authority()
+
+func _server_or_direct_grab(item: Grabbable) -> void:
+	if not multiplayer.has_multiplayer_peer() or multiplayer.is_server():
+		item.set_multiplayer_authority(_my_id())
+		_attach(item)
+	else:
+		_grab_pending = true
+		_pending_t = 2.0
+		server_request_grab.rpc_id(1, item.get_path())
+
+
+@rpc("any_peer")
+func server_request_grab(item_path: String) -> void:
+	if not multiplayer.is_server():
+		return
+	var sender := multiplayer.get_remote_sender_id()
+	var item := get_node_or_null(item_path) as Grabbable
+	if item == null or not item.can_grab():
+		_grab_denied.rpc_id(sender)
+		return
+	item.grab_by(sender)
+	item.set_multiplayer_authority(sender)
+	_client_grab_granted.rpc_id(sender, item_path)
+	_remote_grab.rpc(item_path, sender)
+
+
+## State broadcast so every peer's copy converges (spectators included).
+@rpc("any_peer", "call_local")
+func _remote_grab(item_path: String, sender: int) -> void:
+	var item := get_node_or_null(item_path) as Grabbable
+	if item == null or not item.can_grab():
+		return
+	if sender == _my_id():
+		return
+	item.grab_by(sender)
+
+
+@rpc("any_peer")
+func _client_grab_granted(item_path: String) -> void:
+	_grab_pending = false
+	_pending_t = 0.0
+	var item := get_node_or_null(item_path) as Grabbable
+	if item == null or not item.can_grab():
+		return
+	_attach(item)
+
+
+@rpc("any_peer")
+func _grab_denied() -> void:
+	_grab_pending = false
+	_pending_t = 0.0
+
+
+func _server_or_direct_release(item: Grabbable, thrown: bool, impulse: Vector3) -> void:
+	if not multiplayer.has_multiplayer_peer() or multiplayer.is_server():
+		item.set_multiplayer_authority(1)
+		_release_local(item, thrown, impulse)
+	else:
+		_release_local(item, thrown, impulse)
+		server_release.rpc_id(1, item.get_path(), thrown, impulse)
+
+
+@rpc("any_peer")
+func server_release(item_path: String, thrown: bool, impulse: Vector3) -> void:
+	if not multiplayer.is_server():
+		return
+	var item := get_node_or_null(item_path) as Grabbable
+	if item == null:
+		return
+	item.set_multiplayer_authority(1)
+	if item.is_carried:
+		item.release(thrown, impulse)
+	_remote_release.rpc(item_path, thrown, impulse)
+
+
+@rpc("any_peer", "call_local")
+func _remote_release(item_path: String, thrown: bool, impulse: Vector3) -> void:
+	var item := get_node_or_null(item_path) as Grabbable
+	if item == null or not item.is_carried:
+		return
+	if item.carrier_id == _my_id():
+		return
+	item.release(thrown, impulse)
+
+
+func _attach(item: Grabbable) -> void:
+	carried_item = item
+	item.set_multiplayer_authority(_my_id())
+	item.grab_by(_my_id())
+	if not item.broken.is_connected(_on_carried_broken):
+		item.broken.connect(_on_carried_broken.bind(item))
+	hands = HandsState.GRABBING
+	_grab_t = GRAB_LIFT_TIME
+	carry_distance = clampf(CARRY_DEFAULT_DIST, item.carry_distance_min, item.carry_distance_max)
+	carry_yaw = 0.0
+	carry_pitch = 0.0
+	print("[Hands] grabbed ", item.name)
+
+
+func _release_local(item: Grabbable, thrown: bool, impulse: Vector3) -> void:
+	if item.broken.is_connected(_on_carried_broken):
+		item.broken.disconnect(_on_carried_broken)
+	item.set_multiplayer_authority(1)
+	item.release(thrown, impulse)
+	if carried_item == item:
+		carried_item = null
+	hands = HandsState.EMPTY
+
+
+func _on_carried_broken(item: Grabbable) -> void:
+	print("[Hands] ", item.name, " broke! value lost.")
+
+func _physics_process(delta: float) -> void:
 	if not is_multiplayer_authority():
 		return
-	velocity.x = 0
-	velocity.z = 0
+	_status_step(delta)
+	_locomotion_step(delta)
+	_hands_step(delta)
+	move_and_slide()
 
-	var dir := Input.get_vector("left", "right", "fwd", "bck")
-	var vel := (_cam.global_basis * Vector3(dir.x, 0, dir.y)).normalized() * 4
-	velocity.x = vel.x
-	velocity.z = vel.z
-	pass
+func _status_step(delta: float) -> void:
+	if _throw_cd > 0.0:
+		_throw_cd = maxf(0.0, _throw_cd - delta)
+	if _grab_pending:
+		_pending_t -= delta
+		if _pending_t <= 0.0:
+			_grab_pending = false
+			_pending_t = 0.0
+	if status != StatusState.STUNNED:
+		return
+	_stun_t -= delta
+	if _stun_t <= 0.0:
+		status = StatusState.NORMAL
+		_stun_t = 0.0
+
+func _locomotion_step(delta: float) -> void:
+	loco = LocoState.GROUNDED if is_on_floor() else LocoState.AIRBORNE
+	if not is_on_floor():
+		velocity.y -= GRAVITY * delta
+
+	var stunned := status == StatusState.STUNNED
+	var dir := Vector2.ZERO
+	if not stunned:
+		dir = Input.get_vector("left", "right", "fwd", "bck")
+
+	if Input.is_action_pressed("crouch") and not stunned:
+		stance = StanceState.CROUCH
+	elif Input.is_action_pressed("sprint") and can_sprint() and dir.y < -0.1:
+		stance = StanceState.SPRINT
+	else:
+		stance = StanceState.STAND
+	_apply_stance_visual()
+
+	var mult := 1.0
+	if stance == StanceState.SPRINT:
+		mult = SPRINT_MULT
+	elif stance == StanceState.CROUCH:
+		mult = CROUCH_MULT
+	var speed := BASE_SPEED * speed_factor() * mult
+
+	if dir != Vector2.ZERO and not stunned:
+		var yaw := _cam.global_rotation.y
+		var wish := Vector3(dir.x, 0.0, dir.y).rotated(Vector3.UP, yaw)
+		velocity.x = wish.x * speed
+		velocity.z = wish.z * speed
+	else:
+		velocity.x = move_toward(velocity.x, 0.0, BASE_SPEED * 8.0 * delta)
+		velocity.z = move_toward(velocity.z, 0.0, BASE_SPEED * 8.0 * delta)
+
+	if not stunned and Input.is_action_just_pressed("jump") and is_on_floor():
+		var jv := _jump_velocity()
+		if jv > 0.0:
+			velocity.y = jv
+
+
+func _apply_stance_visual() -> void:
+	var cap := _col.shape as CapsuleShape3D
+	if stance == StanceState.CROUCH and cap != null:
+		cap.height = STAND_CAPSULE_HEIGHT * CROUCH_HEIGHT_FACTOR
+		_col.position.y = -STAND_CAPSULE_HEIGHT * (1.0 - CROUCH_HEIGHT_FACTOR) * 0.5
+		_cam.position.y = -0.5
+	else:
+		if cap != null:
+			cap.height = STAND_CAPSULE_HEIGHT
+		_col.position.y = 0.0
+		_cam.position.y = 0.0
+
+
+func _hands_step(delta: float) -> void:
+	if _throw_t > 0.0:
+		_throw_t -= delta
+		if _throw_t <= 0.0 and hands == HandsState.THROWING:
+			hands = HandsState.EMPTY
+	if status == StatusState.STUNNED:
+		return
+
+	if hands == HandsState.EMPTY and Input.is_action_just_pressed("grab"):
+		_ray.force_raycast_update()
+		var hit := _ray.get_collider() as Grabbable
+		if hit != null:
+			if not try_grab_target(hit):
+				print("[Hands] grab denied: ", hit.name)
+	elif (hands == HandsState.CARRYING or hands == HandsState.GRABBING) and Input.is_action_just_pressed("grab"):
+		place_carried()
+	elif (hands == HandsState.CARRYING or hands == HandsState.GRABBING) and Input.is_action_just_pressed("throw_item"):
+		throw_carried()
+
+	if _grab_t > 0.0:
+		_grab_t -= delta
+		if _grab_t <= 0.0 and hands == HandsState.GRABBING:
+			hands = HandsState.CARRYING
+
+	if (hands == HandsState.CARRYING or hands == HandsState.GRABBING) and carried_item != null:
+		_follow_carried(delta)
+
+
+func _follow_carried(delta: float) -> void:
+	var item := carried_item
+	if multiplayer.has_multiplayer_peer() and not item.is_multiplayer_authority():
+		return
+	var rate := lerpf(18.0, 7.0, clampf((item.weight_kg - 5.0) / 30.0, 0.0, 1.0))
+	if hands == HandsState.GRABBING:
+		rate = 25.0
+	_anchor.position = Vector3(0.0, -0.15, -carry_distance)
+	var target := _anchor.global_position
+	item.global_position = item.global_position.lerp(target, clampf(rate * delta, 0.0, 1.0))
+	var lv: Vector3 = _cam.global_transform.basis.inverse() * velocity
+	var sway := Basis.from_euler(Vector3(carry_pitch + lv.z * 0.01, carry_yaw, -lv.x * 0.015))
+	var want := _cam.global_transform.basis * sway
+	item.global_transform.basis = item.global_transform.basis.slerp(want, clampf(rate * delta, 0.0, 1.0)).orthonormalized()
+
+
+func _find_place_position(item: Grabbable) -> Array:
+	_anchor.position = Vector3(0.0, -0.15, -carry_distance)
+	var want: Vector3 = _anchor.global_position
+	var world := get_world_3d()
+	if world == null or world.direct_space_state == null:
+		return [want, true]
+	var space := world.direct_space_state
+	var q := PhysicsRayQueryParameters3D.create(_cam.global_position, want)
+	q.exclude = [self, item]
+	if space.intersect_ray(q).is_empty():
+		var down := PhysicsRayQueryParameters3D.create(want + Vector3.UP * 0.5, want + Vector3.DOWN * 2.5)
+		down.exclude = [self, item]
+		var floor_hit := space.intersect_ray(down)
+		if not floor_hit.is_empty():
+			want.y = (floor_hit["position"] as Vector3).y + 0.45
+		return [want, true]
+	var yaw := _cam.global_rotation.y
+	var feet := global_position + Vector3(sin(yaw), 0.0, cos(yaw)) * -0.8
+	feet.y = global_position.y - 0.6
+	var q2 := PhysicsRayQueryParameters3D.create(global_position, feet)
+	q2.exclude = [self, item]
+	if space.intersect_ray(q2).is_empty():
+		return [feet, true]
+	return [feet, false]
+
 
 var _max_up_angle_view_rad := deg_to_rad(-90.0)
 var _max_down_angle_view_rad := deg_to_rad(90.0)
@@ -91,10 +455,23 @@ func _unhandled_input(event: InputEvent) -> void:
 	if not is_multiplayer_authority():
 		return
 	if event is InputEventMouseMotion and Input.mouse_mode == Input.MOUSE_MODE_CAPTURED:
-		_cam.rotation.y += -event.relative.x * .005
-		_cam.rotation.x += -event.relative.y * .005
-		#use of deg_to_rad, because we change the x axis rotation with rotation,x, which use radians instead of degrees
-		_cam.rotation.x = clamp(_cam.rotation.x, _max_up_angle_view_rad, _max_down_angle_view_rad)
+		if hands == HandsState.CARRYING and Input.is_action_pressed("adjust_modifier"):
+			carry_yaw -= event.relative.x * 0.01
+			carry_pitch = clampf(carry_pitch - event.relative.y * 0.01, -1.2, 1.2)
+		else:
+			_cam.rotation.y += -event.relative.x * .005
+			_cam.rotation.x += -event.relative.y * .005
+			_cam.rotation.x = clamp(_cam.rotation.x, _max_up_angle_view_rad, _max_down_angle_view_rad)
+	elif event is InputEventMouseButton and event.pressed:
+		if event.button_index == MOUSE_BUTTON_WHEEL_UP and hands == HandsState.CARRYING:
+			_adjust_carry_distance(0.15)
+		elif event.button_index == MOUSE_BUTTON_WHEEL_DOWN and hands == HandsState.CARRYING:
+			_adjust_carry_distance(-0.15)
+
+func _adjust_carry_distance(amount: float) -> void:
+	if carried_item == null:
+		return
+	carry_distance = clampf(carry_distance + amount, carried_item.carry_distance_min, carried_item.carry_distance_max)
 
 func _input(event: InputEvent) -> void:
 	if not is_multiplayer_authority():
@@ -102,16 +479,6 @@ func _input(event: InputEvent) -> void:
 	if event.is_action_pressed("escape_game"):
 		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE if Input.mouse_mode == Input.MOUSE_MODE_CAPTURED else Input.MOUSE_MODE_CAPTURED
 		get_viewport().set_input_as_handled()
-	elif event.is_action("jump") and is_on_floor():
-		velocity.y = 0.1
-
-func _physics_process(delta: float) -> void:
-	if not is_multiplayer_authority():
-		return
-	if not is_on_floor():
-		velocity.y -= delta * 0.5
-		var travel := move_and_collide(Vector3(0, velocity.y, 0))
-		if travel != null: velocity.y = 0
-
-	move_and_slide()
-	pass
+	elif event.is_action_pressed("stun_debug"):
+		apply_stun()
+		get_viewport().set_input_as_handled()

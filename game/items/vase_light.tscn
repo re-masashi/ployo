@@ -1,0 +1,54 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://src/items/grabbable.gd" id="1_grab"]
+[ext_resource type="Material" uid="uid://620h7d78t8mk" path="res://materials/kenney_prototype-textures/Purple/texture_01.tres" id="2_purple"]
+
+[sub_resource type="CylinderShape3D" id="CylinderShape_vase"]
+radius = 0.25
+height = 0.55
+
+[sub_resource type="CylinderMesh" id="CylinderMesh_vase"]
+top_radius = 0.18
+bottom_radius = 0.25
+height = 0.55
+
+[sub_resource type="PhysicsMaterial" id="PhysicsMaterial_vase"]
+friction = 0.8
+bounce = 0.2
+
+[sub_resource type="SceneReplicationConfig" id="SceneReplicationConfig_vase"]
+properties/0/path = NodePath(".:position")
+properties/0/spawn = true
+properties/0/replication_mode = 1
+properties/1/path = NodePath(".:rotation")
+properties/1/spawn = true
+properties/1/replication_mode = 1
+properties/2/path = NodePath(".:is_secured")
+properties/2/spawn = true
+properties/2/replication_mode = 1
+properties/3/path = NodePath(".:is_broken")
+properties/3/spawn = true
+properties/3/replication_mode = 1
+
+[node name="VaseLight" type="RigidBody3D"]
+mass = 5.0
+physics_material_override = SubResource("PhysicsMaterial_vase")
+contact_monitor = true
+max_contacts_reported = 4
+script = ExtResource("1_grab")
+weight_kg = 5.0
+value = 100
+max_hp = 30.0
+break_impact_speed = 4.0
+fragility = 10.0
+carry_speed_factor = 0.9
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="."]
+shape = SubResource("CylinderShape_vase")
+
+[node name="Mesh" type="MeshInstance3D" parent="."]
+material_override = ExtResource("2_purple")
+mesh = SubResource("CylinderMesh_vase")
+
+[node name="MultiplayerSynchronizer" type="MultiplayerSynchronizer" parent="."]
+replication_config = SubResource("SceneReplicationConfig_vase")

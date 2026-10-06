@@ -6,6 +6,10 @@
 [ext_resource type="Material" uid="uid://v7a7plinpmab" path="res://materials/kenney_prototype-textures/Light/texture_01.tres" id="4_light"]
 [ext_resource type="Texture2D" uid="uid://duyeybtlls0ih" path="res://assets/Skyboxes/skybox-day.png" id="5_sky"]
 [ext_resource type="Script" uid="uid://cahiscadube5x" path="res://src/net_manager.gd" id="6_net"]
+[ext_resource type="PackedScene" path="res://items/vase_light.tscn" id="7_vase"]
+[ext_resource type="PackedScene" path="res://items/crate_medium.tscn" id="8_crate"]
+[ext_resource type="PackedScene" path="res://items/safe_heavy.tscn" id="9_safe"]
+[ext_resource type="Script" path="res://src/items/extraction_pad.gd" id="10_pad"]
 
 [sub_resource type="PanoramaSkyMaterial" id="PanoramaSkyMaterial_arena"]
 panorama = ExtResource("5_sky")
@@ -126,6 +130,12 @@ size = Vector3(3, 0.35, 2.1)
 
 [sub_resource type="BoxMesh" id="BoxMesh_SouthRamp"]
 size = Vector3(3, 0.35, 2.1)
+
+[sub_resource type="BoxShape3D" id="BoxShape_Pad"]
+size = Vector3(3, 1.2, 3)
+
+[sub_resource type="BoxMesh" id="BoxMesh_Pad"]
+size = Vector3(3, 0.08, 3)
 
 [sub_resource type="BoxShape3D" id="BoxShape_Floor"]
 size = Vector3(30, 0.1, 30)
@@ -355,3 +365,35 @@ spawn_path = NodePath("../Players")
 
 [node name="NetManager" type="Node" parent="." unique_id=1509325931]
 script = ExtResource("6_net")
+
+[node name="Loot" type="Node3D" parent="." unique_id=774100001]
+
+[node name="VaseLight" parent="Loot" instance=ExtResource("7_vase")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -6, 1.8, -4)
+
+[node name="CrateMedium" parent="Loot" instance=ExtResource("8_crate")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 7, 1.5, 3)
+
+[node name="SafeHeavy" parent="Loot" instance=ExtResource("9_safe")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -2.5, 0.9, -6.5)
+
+[node name="ExtractionPad" type="Area3D" parent="." unique_id=774100002]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.6, 5)
+script = ExtResource("10_pad")
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="ExtractionPad" unique_id=774100003]
+shape = SubResource("BoxShape_Pad")
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="ExtractionPad" unique_id=774100004]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.58, 0)
+material_override = ExtResource("2_orange")
+mesh = SubResource("BoxMesh_Pad")
+
+[node name="Label3D" type="Label3D" parent="ExtractionPad" unique_id=774100005]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1, 0)
+billboard = 1
+font_size = 64
+outline_size = 12
+pixel_size = 0.01
+no_depth_test = true
+text = "EXTRACTION"

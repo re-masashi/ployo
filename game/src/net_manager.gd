@@ -41,7 +41,7 @@ func _process(delta: float) -> void:
 		for c in _players.get_children():
 			var b := c as Node3D
 			var sync := c.get_node_or_null("MultiplayerSynchronizer")
-			parts.append("%s@%s auth=%d sync_auth=%d" % [c.name, str(b.position) if b != null else "?", c.get_multiplayer_authority(), sync.get_multiplayer_authority() if sync != null else -1])
+			parts.append("%s@%s auth=%d sync_auth=%d carried=%s" % [c.name, str(b.position) if b != null else "?", c.get_multiplayer_authority(), sync.get_multiplayer_authority() if sync != null else -1, _carried_name(int(c.name))])
 		print("[Net] tree: ", (", ".join(PackedStringArray(parts)) if not parts.is_empty() else "(empty)"))
 
 
@@ -178,8 +178,17 @@ func _on_peer_connected(peer_id: int) -> void:
 
 func _on_peer_disconnected(peer_id: int) -> void:
 	if multiplayer.is_server():
+		_reclaim_carried(peer_id)
 		_despawn_player(peer_id)
 		_refresh_roster()
+
+
+func _reclaim_carried(peer_id: int) -> void:
+	for n in get_tree().get_nodes_in_group("grabbables"):
+		var g := n as Grabbable
+		if g != null and g.carrier_id == peer_id:
+			print("[Net] reclaiming ", g.name, " from departed peer ", peer_id)
+			g.reset_to_origin()
 
 
 func _on_connected_to_server() -> void:
@@ -215,6 +224,14 @@ func _despawn_player(peer_id: int) -> void:
 	if n != null:
 		_players.remove_child(n)
 		n.queue_free()
+
+
+func _carried_name(peer_id: int) -> String:
+	for n in get_tree().get_nodes_in_group("grabbables"):
+		var g := n as Grabbable
+		if g != null and g.carrier_id == peer_id:
+			return g.name
+	return "-"
 
 
 func _set_status(s: String) -> void:
