@@ -5,7 +5,7 @@
 [ext_resource type="Material" uid="uid://620h7d78t8mk" path="res://materials/kenney_prototype-textures/Purple/texture_01.tres" id="3_purple"]
 [ext_resource type="Material" uid="uid://v7a7plinpmab" path="res://materials/kenney_prototype-textures/Light/texture_01.tres" id="4_light"]
 [ext_resource type="Texture2D" uid="uid://duyeybtlls0ih" path="res://assets/Skyboxes/skybox-day.png" id="5_sky"]
-[ext_resource type="PackedScene" uid="uid://cynn6fc46qob3" path="res://player.tscn" id="6_sbb53"]
+[ext_resource type="Script" uid="uid://cahiscadube5x" path="res://src/net_manager.gd" id="6_net"]
 
 [sub_resource type="PanoramaSkyMaterial" id="PanoramaSkyMaterial_arena"]
 panorama = ExtResource("5_sky")
@@ -333,5 +333,25 @@ shape = SubResource("BoxShape_Floor")
 material_override = ExtResource("1_green")
 mesh = SubResource("BoxMesh_Floor")
 
-[node name="CharacterBody3D" parent="." unique_id=601084684 instance=ExtResource("6_sbb53")]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 6.514459, 2.1507792, 0)
+[node name="SpawnPoints" type="Node3D" parent="." unique_id=2146821718]
+
+[node name="Spawn1" type="Marker3D" parent="SpawnPoints" unique_id=1979901335 groups=["spawn_points"]]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1, 0)
+
+[node name="Spawn2" type="Marker3D" parent="SpawnPoints" unique_id=1039910967 groups=["spawn_points"]]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 5, 1, 5)
+
+[node name="Spawn3" type="Marker3D" parent="SpawnPoints" unique_id=692081001 groups=["spawn_points"]]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -5, 1, 5)
+
+[node name="Spawn4" type="Marker3D" parent="SpawnPoints" unique_id=1757565456 groups=["spawn_points"]]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1, -6)
+
+[node name="Players" type="Node3D" parent="." unique_id=2092624638]
+
+[node name="PlayerSpawner" type="MultiplayerSpawner" parent="." unique_id=358111712]
+_spawnable_scenes = PackedStringArray("uid://cynn6fc46qob3")
+spawn_path = NodePath("../Players")
+
+[node name="NetManager" type="Node" parent="." unique_id=1509325931]
+script = ExtResource("6_net")

@@ -4,6 +4,18 @@
 
 [sub_resource type="CapsuleShape3D" id="CapsuleShape3D_6mibh"]
 
+[sub_resource type="CapsuleMesh" id="CapsuleMesh_player"]
+radius = 0.5
+height = 2.0
+
+[sub_resource type="SceneReplicationConfig" id="SceneReplicationConfig_sync"]
+properties/0/path = NodePath(".:position")
+properties/0/spawn = true
+properties/0/replication_mode = 1
+properties/1/path = NodePath(".:rotation")
+properties/1/spawn = true
+properties/1/replication_mode = 1
+
 [node name="CharacterBody3D" type="CharacterBody3D" unique_id=601084684]
 collision_layer = 2
 script = ExtResource("1_i25i0")
@@ -11,5 +23,20 @@ script = ExtResource("1_i25i0")
 [node name="CollisionShape3D" type="CollisionShape3D" parent="." unique_id=183702783]
 shape = SubResource("CapsuleShape3D_6mibh")
 
+[node name="Body" type="MeshInstance3D" parent="."]
+mesh = SubResource("CapsuleMesh_player")
+
+[node name="NameTag" type="Label3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.4, 0)
+billboard = 1
+font_size = 64
+outline_size = 12
+pixel_size = 0.01
+no_depth_test = true
+text = "Player"
+
 [node name="Camera3D" type="Camera3D" parent="." unique_id=90068370]
 unique_name_in_owner = true
+
+[node name="MultiplayerSynchronizer" type="MultiplayerSynchronizer" parent="."]
+replication_config = SubResource("SceneReplicationConfig_sync")
