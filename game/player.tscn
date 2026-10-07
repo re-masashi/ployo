@@ -1,12 +1,11 @@
 [gd_scene format=3 uid="uid://cynn6fc46qob3"]
 
 [ext_resource type="Script" uid="uid://b8dfbjd8tkpxt" path="res://src/char_controller.gd" id="1_i25i0"]
+[ext_resource type="PackedScene" uid="uid://dwt54viglddjv" path="res://assets/models/char2.glb" id="2_char2"]
 
 [sub_resource type="CapsuleShape3D" id="CapsuleShape3D_6mibh"]
-
-[sub_resource type="CapsuleMesh" id="CapsuleMesh_player"]
-radius = 0.5
-height = 2.0
+radius = 0.2631836
+height = 1.6566844
 
 [sub_resource type="SceneReplicationConfig" id="SceneReplicationConfig_sync"]
 properties/0/path = NodePath(".:position")
@@ -21,32 +20,34 @@ collision_layer = 2
 script = ExtResource("1_i25i0")
 
 [node name="CollisionShape3D" type="CollisionShape3D" parent="." unique_id=183702783]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.32787114, 0)
 shape = SubResource("CapsuleShape3D_6mibh")
 
-[node name="Body" type="MeshInstance3D" parent="."]
-mesh = SubResource("CapsuleMesh_player")
+[node name="Model" type="Node3D" parent="." unique_id=73038784]
+transform = Transform3D(0.3, 0, 0, 0, 0.3, 0, 0, 0, 0.3, 0, -0.64241236, 0)
 
-[node name="NameTag" type="Label3D" parent="."]
+[node name="Char2" parent="Model" unique_id=1286340112 instance=ExtResource("2_char2")]
+transform = Transform3D(0.99999976, 0, 0, 0, 0.99999976, 0, 0, 0, 0.99999976, 0, 2.971382, 0)
+
+[node name="NameTag" type="Label3D" parent="." unique_id=1448319274]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.4, 0)
-billboard = 1
-font_size = 64
-outline_size = 12
 pixel_size = 0.01
+billboard = 1
 no_depth_test = true
 text = "Player"
+font_size = 64
 
 [node name="Camera3D" type="Camera3D" parent="." unique_id=90068370]
 unique_name_in_owner = true
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.10565519, 0)
 
-[node name="CarryAnchor" type="Marker3D" parent="Camera3D"]
+[node name="CarryAnchor" type="Marker3D" parent="Camera3D" unique_id=88409985]
 unique_name_in_owner = true
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.15, -1.1)
 
-[node name="GrabRay" type="RayCast3D" parent="Camera3D"]
+[node name="GrabRay" type="RayCast3D" parent="Camera3D" unique_id=1818747689]
 unique_name_in_owner = true
 target_position = Vector3(0, 0, -2.8)
-collide_with_areas = false
-collide_with_bodies = true
 
-[node name="MultiplayerSynchronizer" type="MultiplayerSynchronizer" parent="."]
+[node name="MultiplayerSynchronizer" type="MultiplayerSynchronizer" parent="." unique_id=1269854612]
 replication_config = SubResource("SceneReplicationConfig_sync")

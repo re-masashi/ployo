@@ -32,6 +32,13 @@ const THROW_STATE_TIME := 0.1
 const STUN_TIME := 2.0
 const CARRY_DEFAULT_DIST := 1.4
 
+const WALK_ANIMS := ["walk", "walk_001"]
+const WALK_PLAYBACK_SPEED := 3.0
+const MODEL_BASE_SCALE := 0.6
+const MODEL_YAW_OFFSET := 0.0
+const WALK_MOVE_THRESHOLD := 0.5
+const MODEL_TURN_SPEED := 12.0
+
 var player_name := "Player"
 var player_color := Color(0.25, 0.55, 0.95)
 
@@ -64,9 +71,15 @@ static func spawn_position_for(peer_id: int, marks: Array) -> Vector3:
 @onready var _cam: Camera3D = %Camera3D
 @onready var _anchor: Marker3D = %CarryAnchor
 @onready var _ray: RayCast3D = %GrabRay
-@onready var _body: MeshInstance3D = $Body
+@onready var _model: Node3D = $Model
 @onready var _tag: Label3D = $NameTag
 @onready var _col: CollisionShape3D = $CollisionShape3D
+
+var _anim: AnimationPlayer = null
+var _walk_anim := ""
+var _prev_pos := Vector3.ZERO
+var _walk_keepalive := 0.0
+var _anim_diag_done := false
 
 
 func _enter_tree() -> void:
@@ -80,6 +93,9 @@ func _ready() -> void:
 	var oid := get_multiplayer_authority()
 	player_name = "Player%d" % oid
 	player_color = PALETTE[absi(oid) % PALETTE.size()]
+	_anim = $Model.find_child("AnimationPlayer", true, false) as AnimationPlayer
+	_resolve_walk_anim()
+	_prev_pos = global_position
 	_apply_identity()
 	_ray.add_exception(self)
 	_col.shape = _col.shape.duplicate()
@@ -88,10 +104,29 @@ func _ready() -> void:
 		position = spawn_position_for(oid, marks)
 		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 		_cam.current = true
-		_body.visible = false
+		_model.visible = false
 		_tag.visible = false
 	else:
 		_cam.current = false
+
+
+func _resolve_walk_anim() -> void:
+	if _anim == null:
+		push_warning("[Walk] no AnimationPlayer under $Model; walk disabled")
+		return
+	for n in WALK_ANIMS:
+		if _anim.has_animation(n):
+			_walk_anim = n
+			break
+	if _walk_anim.is_empty() and _anim.get_animation_list().size() > 0:
+		_walk_anim = _anim.get_animation_list()[0]
+	if _walk_anim.is_empty():
+		push_warning("[Walk] AnimationPlayer has no animations")
+		return
+	var clip: Animation = _anim.get_animation(_walk_anim)
+	if clip != null:
+		clip.loop_mode = Animation.LOOP_LINEAR
+	print("[Walk] using anim '", _walk_anim, "' from ", _anim.get_animation_list())
 
 
 func setup(p_name: String, p_color: Color) -> void:
@@ -103,10 +138,8 @@ func _apply_identity() -> void:
 	if not is_node_ready():
 		return
 	_tag.text = player_name
-	var mat := StandardMaterial3D.new()
-	mat.albedo_color = player_color
-	mat.roughness = 0.6
-	_body.set_surface_override_material(0, mat)
+	# NOTE: char2.glb uses its own textures, so we no longer tint the body
+	# with player_color (that would destroy the textures).
 
 
 func can_sprint() -> bool:
@@ -309,6 +342,53 @@ func _physics_process(delta: float) -> void:
 	_locomotion_step(delta)
 	_hands_step(delta)
 	move_and_slide()
+	_authority_anim_update(delta)
+
+
+func _process(delta: float) -> void:
+	# Remote copies never run _physics_process, so drive their walk
+	# visuals from replicated position deltas instead.
+	if is_multiplayer_authority():
+		return
+	if _anim == null or _walk_anim.is_empty():
+		_prev_pos = global_position
+		return
+	var dt := maxf(delta, 0.0001)
+	var moved: Vector3 = (global_position - _prev_pos) / dt
+	_prev_pos = global_position
+	var flat := Vector3(moved.x, 0.0, moved.z)
+	_update_walk_visual(flat.length() > WALK_MOVE_THRESHOLD, flat, delta)
+
+
+func _authority_anim_update(delta: float) -> void:
+	var flat := Vector3(velocity.x, 0.0, velocity.z)
+	_prev_pos = global_position
+	_update_walk_visual(flat.length() > WALK_MOVE_THRESHOLD, flat, delta)
+
+
+func _update_walk_visual(moving: bool, flat_dir: Vector3, delta: float) -> void:
+	if flat_dir.length_squared() > 0.01:
+		var target_yaw := atan2(-flat_dir.x, -flat_dir.z) + MODEL_YAW_OFFSET
+		_model.rotation.y = lerp_angle(_model.rotation.y, target_yaw, clampf(MODEL_TURN_SPEED * delta, 0.0, 1.0))
+	if _anim == null or _walk_anim.is_empty():
+		return
+	# Keepalive: replicated positions arrive in discrete net ticks, so a
+	# per-frame delta flickers. Hold playback briefly through gaps.
+	if moving:
+		_walk_keepalive = 0.35
+	else:
+		_walk_keepalive = maxf(0.0, _walk_keepalive - delta)
+	if _walk_keepalive > 0.0:
+		if not _anim.is_playing() or _anim.current_animation != _walk_anim:
+			_anim.play(_walk_anim, 0.15)
+			if not _anim_diag_done:
+				_anim_diag_done = true
+				print("[Walk] playing '", _walk_anim, "'")
+		# 24fps source x3 = 72fps effective playback.
+		_anim.speed_scale = WALK_PLAYBACK_SPEED
+	else:
+		if _anim.is_playing() and _anim.current_animation == _walk_anim:
+			_anim.stop()
 
 func _status_step(delta: float) -> void:
 	if _throw_cd > 0.0:
@@ -371,11 +451,14 @@ func _apply_stance_visual() -> void:
 		cap.height = STAND_CAPSULE_HEIGHT * CROUCH_HEIGHT_FACTOR
 		_col.position.y = -STAND_CAPSULE_HEIGHT * (1.0 - CROUCH_HEIGHT_FACTOR) * 0.5
 		_cam.position.y = -0.5
+		_model.scale = Vector3(MODEL_BASE_SCALE, MODEL_BASE_SCALE * CROUCH_HEIGHT_FACTOR, MODEL_BASE_SCALE)
 	else:
 		if cap != null:
 			cap.height = STAND_CAPSULE_HEIGHT
 		_col.position.y = 0.0
 		_cam.position.y = 0.0
+		if is_node_ready() and _model != null:
+			_model.scale = Vector3.ONE * MODEL_BASE_SCALE
 
 
 func _hands_step(delta: float) -> void:
