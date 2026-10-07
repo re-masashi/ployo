@@ -12,7 +12,7 @@ signal broken
 @export var carry_distance_min := 1.2
 @export var carry_distance_max := 2.2
 
-const REGREB_COOLDOWN := 0.4
+const REGRAB_COOLDOWN := 0.4
 const PLACE_GRACE := 0.6
 
 var hp: float
@@ -26,7 +26,7 @@ var _cooldown := 0.0
 var _damage_grace := 0.0
 var _prev_speed := 0.0
 var _mesh: MeshInstance3D
-
+var prev_collision_layer := collision_layer
 
 func _ready() -> void:
 	hp = max_hp
@@ -64,6 +64,8 @@ func can_grab() -> bool:
 func grab_by(peer_id: int) -> void:
 	if not can_grab():
 		return
+	prev_collision_layer = collision_layer
+	collision_layer = 0
 	is_carried = true
 	carrier_id = peer_id
 	_cooldown = 0.0
@@ -79,8 +81,9 @@ func release(thrown: bool, impulse: Vector3) -> void:
 	carrier_id = -1
 	freeze = false
 	sleeping = false
+	collision_layer = prev_collision_layer
 	if thrown:
-		_cooldown = REGREB_COOLDOWN
+		_cooldown = REGRAB_COOLDOWN
 		apply_central_impulse(impulse)
 		angular_velocity = Vector3(randf_range(-2.0, 2.0), randf_range(-2.0, 2.0), randf_range(-2.0, 2.0))
 	else:
