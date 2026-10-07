@@ -1,17 +1,16 @@
-[gd_scene format=3]
+[gd_scene format=3 uid="uid://h3vrfpatlilp"]
 
-[ext_resource type="Script" path="res://src/items/grabbable.gd" id="1_grab"]
+[ext_resource type="Script" uid="uid://dspnwwy04cpqi" path="res://src/items/grabbable.gd" id="1_grab"]
 [ext_resource type="Material" uid="uid://c2rtrt0ho7wvg" path="res://materials/kenney_prototype-textures/Green/texture_09.tres" id="2_green"]
-
-[sub_resource type="BoxShape3D" id="BoxShape_safe"]
-size = Vector3(1, 1, 1)
-
-[sub_resource type="BoxMesh" id="BoxMesh_safe"]
-size = Vector3(1, 1, 1)
 
 [sub_resource type="PhysicsMaterial" id="PhysicsMaterial_safe"]
 friction = 0.9
 bounce = 0.1
+
+[sub_resource type="BoxShape3D" id="BoxShape_safe"]
+
+[sub_resource type="BoxMesh" id="BoxMesh_safe"]
+material = ExtResource("2_green")
 
 [sub_resource type="SceneReplicationConfig" id="SceneReplicationConfig_safe"]
 properties/0/path = NodePath(".:position")
@@ -27,12 +26,12 @@ properties/3/path = NodePath(".:is_broken")
 properties/3/spawn = true
 properties/3/replication_mode = 1
 
-[node name="SafeHeavy" type="RigidBody3D"]
+[node name="SafeHeavy" type="RigidBody3D" unique_id=2030390223]
 mass = 35.0
 physics_material_override = SubResource("PhysicsMaterial_safe")
+continuous_cd = true
 contact_monitor = true
 max_contacts_reported = 4
-continuous_cd = true
 script = ExtResource("1_grab")
 weight_kg = 35.0
 value = 500
@@ -41,12 +40,11 @@ break_impact_speed = 12.0
 fragility = 6.0
 carry_speed_factor = 0.45
 
-[node name="CollisionShape3D" type="CollisionShape3D" parent="."]
+[node name="CollisionShape3D" type="CollisionShape3D" parent="." unique_id=1381702955]
 shape = SubResource("BoxShape_safe")
 
-[node name="Mesh" type="MeshInstance3D" parent="."]
-material_override = ExtResource("2_green")
+[node name="Mesh" type="MeshInstance3D" parent="." unique_id=789843498]
 mesh = SubResource("BoxMesh_safe")
 
-[node name="MultiplayerSynchronizer" type="MultiplayerSynchronizer" parent="."]
+[node name="MultiplayerSynchronizer" type="MultiplayerSynchronizer" parent="." unique_id=872795364]
 replication_config = SubResource("SceneReplicationConfig_safe")
