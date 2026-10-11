@@ -364,9 +364,9 @@ class Executor:
 		static var _error_decoder := RegEx.create_from_string(r'''Cannot convert argument (\d+) from ([a-zA-Z0-9_\[\]-]+) to ([a-zA-Z0-9_\[\]-]+)''')
 
 		var captured_error: bool
+		var position: int
 		var from_type: String
 		var to_type: String
-		var position: int
 
 		@warning_ignore("unused_parameter")
 		func _log_error(function: String, file: String, line: int, code: String, rationale: String, editor_notify: bool, error_type: int, script_backtraces: Array[ScriptBacktrace]) -> void:
