@@ -13,10 +13,13 @@ var logger: RobertLogger:
 			logger.console = self
 		return logger
 
+#func _init() -> void:
+#	logger
+
 func _ready() -> void:
 	if Engine.is_editor_hint(): return
 
-	var test := 'cmd2 [1 2 3] (6 7 8 9 10)'
+	var test := 'cmd2 [1 2 3] (6 7)'
 	var tokens := ConsoleLanguage.new().tokenize(test)
 	if tokens.has_error:
 		print(tokens.errors)
@@ -29,21 +32,25 @@ func _ready() -> void:
 		print(parser.errors)
 		return
 	print(command)
-	var checker := ConsoleLanguage.Typechecker.new()
+	var exec := ConsoleLanguage.Executor.new()
 	var obj := preload("test_commands.gd").new()
-	checker.check_command(ConsoleLanguage.get_environment_of(obj), command)
-	if not checker.errors.is_empty():
-		print(checker.errors)
+	var result = exec.exec_command(ConsoleLanguage.get_environment_of(obj), command)
+	if not exec.errors.is_empty():
+		print(exec.errors)
 		return
-	print("Checked successfully!")
+	if ConsoleLanguage.Executor.stop(result):
+		print("execution failed")
+		return
+	print("Executed successfully!")
 
 class RobertLogger extends Logger:
 	var console: Console
 
+	func _init() -> void:
+		OS.add_logger(self)
+
 	func _notification(what: int) -> void:
-		if what == NOTIFICATION_POSTINITIALIZE:
-			OS.add_logger(self)
-		elif what == NOTIFICATION_PREDELETE:
+		if what == NOTIFICATION_PREDELETE:
 			OS.remove_logger(self)
 
 	@warning_ignore("unused_parameter")
@@ -52,4 +59,4 @@ class RobertLogger extends Logger:
 
 	@warning_ignore("unused_parameter")
 	func _log_error(function: String, file: String, line: int, code: String, rationale: String, editor_notify: bool, error_type: int, script_backtraces: Array[ScriptBacktrace]) -> void:
-		pass
+		breakpoint

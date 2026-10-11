@@ -253,6 +253,13 @@ class Parser:
 		})
 
 class Executor:
+	static var stop_immediately := RefCounted.new():
+		set(value):
+			if stop_immediately != null:
+				assert(false)
+				return
+			stop_immediately = value
+
 	var errors: Array[Dictionary]
 
 	func exec_expr(env: Env, expr: Expr) -> Variant:
@@ -269,45 +276,43 @@ class Executor:
 			var var_expr := expr as VarExpr
 			if not var_expr.name in env.variables:
 				generate_ast_error(var_expr, "unknown variable `{name}`")
-				return null
+				return stop_immediately
 			return env.variables[var_expr.name].type
 
 		if expr is VectorExpr:
 			var vector_expr := expr as VectorExpr
 			if vector_expr.elements.size() > 4:
 				generate_ast_error(vector_expr, "vector larger than 4")
-				return null
+				return stop_immediately
 			if vector_expr.elements.size() == 0:
 				generate_ast_error(vector_expr, "empty vector")
-				return null
+				return stop_immediately
+			var args: Array
+			for e in vector_expr.elements:
+				var v = exec_expr(env, e)
+				if stop(v): return stop_immediately
+				args.append(v)
 			match vector_expr.elements.size():
 				2:
-					return Vector2(
-						exec_expr(env, vector_expr.elements[0]),
-						exec_expr(env, vector_expr.elements[1]),
-					)
+					return Vector2(args[0], args[1])
 				3:
-					return Vector3(
-						exec_expr(env, vector_expr.elements[0]),
-						exec_expr(env, vector_expr.elements[1]),
-						exec_expr(env, vector_expr.elements[2]),
-					)
+					return Vector3(args[0], args[1], args[2])
 				4:
-					return Vector4(
-						exec_expr(env, vector_expr.elements[0]),
-						exec_expr(env, vector_expr.elements[1]),
-						exec_expr(env, vector_expr.elements[2]),
-						exec_expr(env, vector_expr.elements[3]),
-					)
+					return Vector4(args[0], args[1], args[2], args[3])
 				_:
 					assert(false)
-					return null
+					return stop_immediately
 
 		if expr is ListExpr:
 			var list_expr := expr as ListExpr
-			return list_expr.elements.map(func(e): return exec_expr(env, e))
+			var args: Array
+			for e in list_expr.elements:
+				var v = exec_expr(env, e)
+				if stop(v): return stop_immediately
+				args.append(v)
+			return args
 		assert(false)
-		return null
+		return stop_immediately
 
 	func exec_command(env: Env, command: Command) -> Variant:
 		if not command.command in env.methods:
@@ -322,8 +327,24 @@ class Executor:
 			generate_ast_error(command, "too many arguments for {command}")
 			return
 
-		var args := command.args.map(func(e): return exec_expr(env, e))
-		return method.callable.callv(args)
+		var args: Array
+		for e in command.args:
+			var v = exec_expr(env, e)
+			if stop(v): return stop_immediately
+			args.append(v)
+
+		var logger := _ErrorCapturingLogger.new()
+		OS.add_logger(logger)
+		var result
+		if method.callable.get_object() and method.callable.get_method():
+			result = method.callable.get_object().callv(method.callable.get_method(), args)
+		else:
+			result = method.callable.callv(args)
+		OS.remove_logger(logger)
+		if logger.captured_error:
+			generate_ast_error(command.args[logger.position - 1], "cannot convert from %s to %s" % [logger.from_type, logger.to_type])
+			return stop_immediately
+		return result
 
 	func generate_ast_error(node: ASTNode, message: String) -> void:
 		var range_min := INT64_MAX
@@ -335,6 +356,26 @@ class Executor:
 			RANGE: Vector2i(range_min, range_max),
 			MESSAGE: message.format(node),
 		})
+
+	static func stop(v) -> bool:
+		return v is RefCounted and v == stop_immediately
+
+	class _ErrorCapturingLogger extends Logger:
+		static var _error_decoder := RegEx.create_from_string(r'''Cannot convert argument (\d+) from ([a-zA-Z0-9_\[\]-]+) to ([a-zA-Z0-9_\[\]-]+)''')
+
+		var captured_error: bool
+		var from_type: String
+		var to_type: String
+		var position: int
+
+		@warning_ignore("unused_parameter")
+		func _log_error(function: String, file: String, line: int, code: String, rationale: String, editor_notify: bool, error_type: int, script_backtraces: Array[ScriptBacktrace]) -> void:
+			var m := _error_decoder.search(rationale)
+			if m != null:
+				captured_error = true
+				position = m.get_string(1).to_int()
+				from_type = m.get_string(2)
+				to_type = m.get_string(3)
 
 class Env:
 	var methods: Dictionary[StringName, MethodInfo]
