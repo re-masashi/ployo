@@ -1,7 +1,13 @@
 [gd_resource type="Theme" format=3 uid="uid://5l28gssbq22k"]
 
+[ext_resource type="FontFile" uid="uid://dgdhe2yu0q58m" path="res://assets/fonts/IosevkaWeb-Bold.ttf" id="1_58jnp"]
 [ext_resource type="FontFile" uid="uid://qqpjenuyfm3b" path="res://assets/fonts/IosevkaWeb-Regular.ttf" id="1_470mv"]
+[ext_resource type="FontFile" uid="uid://bpo8fbwhh0eui" path="res://assets/fonts/IosevkaWeb-BoldItalic.ttf" id="2_466ly"]
+[ext_resource type="FontFile" uid="uid://coco4b4wblb7m" path="res://assets/fonts/IosevkaWeb-Italic.ttf" id="3_52mx2"]
 
 [resource]
-ConsoleTextEdit/base_type = &"TextEdit"
-ConsoleTextEdit/fonts/font = ExtResource("1_470mv")
+RichTextLabel/fonts/bold_font = ExtResource("1_58jnp")
+RichTextLabel/fonts/bold_italics_font = ExtResource("2_466ly")
+RichTextLabel/fonts/italics_font = ExtResource("3_52mx2")
+RichTextLabel/fonts/mono_font = ExtResource("1_470mv")
+RichTextLabel/fonts/normal_font = ExtResource("1_470mv")
