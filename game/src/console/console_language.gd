@@ -1,0 +1,471 @@
+class_name ConsoleLanguage
+
+const RANGE := &"range"
+const MESSAGE := &"message"
+
+static var _matchers: Dictionary[RegEx, Token.Type] = {
+	RegEx.create_from_string('''^("(?:[^"\\\\]*(?:\\.[^"\\\\]*)*)"|[a-zA-Z_]+[a-zA-Z_0-9\\/-]*)'''):
+		Token.Type.Text,
+	RegEx.create_from_string("^([0-9]+\\.?[0-9]*)"): Token.Type.Flt,
+	RegEx.create_from_string("^(-?[0-9]+|-?0[xX][0-9a-fA-F]+)"): Token.Type.Int,
+	RegEx.create_from_string("^\\$(-?[a-zA-Z_]+[a-zA-Z_0-9/-]*)"): Token.Type.VarRef,
+}
+
+const _SINGLE_CHAR_TOKENS: Dictionary[String, Token.Type] = {
+	"[": Token.Type.BracketOpen,
+	"]": Token.Type.BracketClose,
+	"(": Token.Type.ParenOpen,
+	")": Token.Type.ParenClose,
+	"{": Token.Type.BraceOpen,
+	"}": Token.Type.BraceClose,
+}
+
+func tokenize(input: String) -> TokenizationResult:
+	var r := TokenizationResult.new()
+	var i := 0
+	var range_start := -1
+	while i < input.length():
+		var found_match := false
+		if input[i] == " " or input[i] == "\t":
+			found_match = true
+		elif input[i] in _SINGLE_CHAR_TOKENS:
+			found_match = true
+			var tk := Token.new()
+			tk.loc = Vector2i(i, i + 1)
+			tk.content = input[i]
+			tk.type = _SINGLE_CHAR_TOKENS[input[i]]
+			r.tokens.append(tk)
+		else:
+			var substr := input.substr(i)
+			for matcher in _matchers:
+				var m := matcher.search(substr)
+				if m == null:
+					continue
+				found_match = true
+				var tk := Token.new()
+				var end := m.get_end()
+				tk.loc = Vector2i(i, i + end)
+				i += end - 1
+				tk.content = m.get_string(1)
+				tk.type = _matchers[matcher]
+				r.tokens.append(tk)
+				break
+		if not found_match and range_start == -1:
+			range_start = i
+		if found_match and range_start != -1:
+			r.errors.append({
+				RANGE: Vector2i(range_start, i),
+				MESSAGE: "invalid token",
+			})
+			range_start = -1
+		i += 1
+	if range_start != -1:
+		r.errors.append({
+			RANGE: Vector2i(range_start, i),
+			MESSAGE: "invalid or unterminated token",
+		})
+
+	return r
+
+static func get_environment_of(obj: Object, base_class: StringName = obj.get_class()) -> Env:
+	var env := Env.new()
+	var core_base_methods := ClassDB.class_get_method_list(base_class).map(func(e): return e.name)
+	var core_base_vars := ClassDB.class_get_property_list(base_class).map(func(e): return e.name)
+
+	for method in obj.get_method_list():
+		if method.name in core_base_methods:
+			continue
+		var info := MethodInfo.new()
+		info.name = method.name
+		var args = method.args
+		for i in args.size():
+			var arg = args[i]
+			var arg_info := ArgumentInfo.new()
+			arg_info.name = arg.name
+			arg_info.type = _get_type(arg)
+			var default_args_i: int = i - args.size() + method.default_args.size()
+			if default_args_i > 0:
+				arg_info.optional = true
+				arg_info.optional_default = method.default_args[default_args_i]
+			info.arguments.append(arg_info)
+		info.ret = _get_type(method.return)
+		info.callable = Callable(obj, method.name)
+
+		env.add_method(info)
+
+	for variable in obj.get_property_list():
+		if variable.name in core_base_vars:
+			continue
+		var info := VarInfo.new()
+		info.name = variable.name
+		info.type = _get_type(variable)
+
+		env.add_variable(info)
+
+	return env
+
+
+static func _get_type(member: Dictionary) -> TypeInfo:
+	var type_info := TypeInfo.new()
+	type_info.clazz_name = member.class_name
+	type_info.type = member.type
+	type_info.hint = member.hint
+	type_info.hint_string = member.hint_string
+	type_info.usage = member.usage
+	return type_info
+
+class Token:
+	enum Type {
+		Text,
+		Int,
+		Flt,
+		VarRef,
+		BracketOpen,
+		BracketClose,
+		ParenOpen,
+		ParenClose,
+		BraceOpen,
+		BraceClose,
+	}
+
+	var loc: Vector2i
+	var type: Type
+	var content: String
+
+	func _to_string() -> String:
+		return "%s (%s)" % [content, Type.find_key(type)]
+
+class Parser:
+	var tokens: Array[Token]
+	var errors: Array[Dictionary]
+
+	var i: int = 0
+	var in_error: bool = false
+
+	func parse_primary() -> Expr:
+		var token := consume()
+		if check_in_error("expression expected"): return null
+		match token.type:
+			Token.Type.Text:
+				var e := TextExpr.new()
+				e.data.append(token)
+				e.text = token.content
+				return e
+			Token.Type.Int:
+				var e := IntExpr.new()
+				e.data.append(token)
+				var t := token.content
+				e.num = (t.hex_to_int() if t.begins_with("0x") or t.begins_with("0X") else t.to_int())
+				return e
+			Token.Type.Flt:
+				var e := FltExpr.new()
+				e.data.append(token)
+				e.num = token.content.to_float()
+				return e
+			Token.Type.VarRef:
+				var e := VarExpr.new()
+				e.data.append(token)
+				e.name = token.content
+				return e
+			Token.Type.BracketOpen:
+				var e := ListExpr.new()
+				e.data.append(token)
+				while i < tokens.size() and peek().type != Token.Type.BracketClose:
+					var expr := parse_expr()
+					if check_in_error(): return null
+					e.elements.append(expr)
+				var closing := consume_ty(Token.Type.BracketClose)
+				if check_in_error("`]` expected"): return null
+				e.data.append(closing)
+				return e
+			Token.Type.ParenOpen:
+				var e := VectorExpr.new()
+				e.data.append(token)
+				while i < tokens.size() and peek().type != Token.Type.ParenClose:
+					var expr := parse_expr()
+					if check_in_error(): return null
+					e.elements.append(expr)
+				var closing := consume_ty(Token.Type.ParenClose)
+				if check_in_error("`)` expected"): return null
+				e.data.append(closing)
+				if e.elements.size() == 1: return e.elements[0]
+				return e
+			_:
+				in_error = true
+				generate_token_error(token, "expression expected")
+		return null
+
+	func parse_expr() -> Expr:
+		return parse_primary()
+
+	func parse_command() -> Command:
+		var invocation := Command.new()
+		var next_tk := consume_ty(Token.Type.Text)
+		if check_in_error("text expected"): return null
+
+		invocation.data = [next_tk]
+		invocation.command = next_tk.content
+
+		while i < tokens.size():
+			var expr := parse_primary()
+			if check_in_error(): return null
+			invocation.args.append(expr)
+
+		return invocation
+
+	func peek() -> Token:
+		if i >= tokens.size(): return null
+		return tokens[i]
+
+	func consume() -> Token:
+		if i >= tokens.size(): return null
+		i += 1
+		return tokens[i - 1]
+
+	func consume_ty(type: Token.Type) -> Token:
+		var tk := consume()
+		if not tk or tk.type != type:
+			in_error = true
+			return null
+		return tk
+
+	func check_in_error(message: String = "") -> bool:
+		if not in_error:
+			return false
+		generate_expected_error(message)
+		return true
+
+	func generate_expected_error(message: String) -> void:
+		if message.is_empty(): return
+
+		var location := 0 if i == 0 else tokens[i - 1].loc.y
+		errors.append({
+			RANGE: Vector2i(location, location + 1),
+			MESSAGE: message,
+		})
+
+	func generate_token_error(token: Token, message: String) -> void:
+		if message.is_empty(): return
+
+		errors.append({
+			RANGE: token.loc,
+			MESSAGE: message,
+		})
+
+class Typechecker:
+	var errors: Array[Dictionary]
+
+	func unify_types(a: TypeInfo, b: TypeInfo) -> TypeInfo:
+		if a != null and b == null:
+			return b
+		elif a == null and b != null:
+			return b
+		elif a == null and b == null:
+			return null
+		elif a.type == b.type:
+			return a
+		elif a.type == TYPE_FLOAT and b.type == TYPE_INT:
+			return a
+		elif a.type == TYPE_INT and b.type == TYPE_FLOAT:
+			return b
+		elif a.type == TYPE_VECTOR2 and b.type == TYPE_VECTOR2I:
+			return a
+		elif a.type == TYPE_VECTOR2I and b.type == TYPE_VECTOR2:
+			return b
+		elif a.type == TYPE_VECTOR3 and b.type == TYPE_VECTOR3I:
+			return a
+		elif a.type == TYPE_VECTOR3I and b.type == TYPE_VECTOR3:
+			return b
+		elif a.type == TYPE_VECTOR4 and b.type == TYPE_VECTOR4I:
+			return a
+		elif a.type == TYPE_VECTOR4I and b.type == TYPE_VECTOR4:
+			return b
+		return null
+
+	func check_expr(env: Env, expr: Expr) -> TypeInfo:
+		if expr is TextExpr:
+			var ti := TypeInfo.new()
+			ti.type = TYPE_STRING
+			return ti
+
+		if expr is IntExpr:
+			var ti := TypeInfo.new()
+			ti.type = TYPE_INT
+			return ti
+
+		if expr is FltExpr:
+			var ti := TypeInfo.new()
+			ti.type = TYPE_FLOAT
+			return ti
+
+		if expr is VarExpr:
+			var var_expr := expr as VarExpr
+			if not var_expr.name in env.variables:
+				generate_ast_error(var_expr, "unknown variable `{name}`")
+				return null
+			return env.variables[var_expr.name].type
+
+		if expr is VectorExpr:
+			var vector_expr := expr as VectorExpr
+			if vector_expr.elements.size() > 4:
+				generate_ast_error(vector_expr, "vectors cannot be larger than 4")
+				return null
+			if vector_expr.elements.size() == 0:
+				generate_ast_error(vector_expr, "vectors cannot be empty")
+				return null
+			if vector_expr.elements.size() == 1:
+				assert(false)
+			var unified_element_type := check_expr(env, vector_expr.elements[0])
+			if unified_element_type == null: return null
+			for e in vector_expr.elements.slice(1):
+				var element_type := check_expr(env, e)
+				if element_type == null: return null
+				unified_element_type = unify_types(unified_element_type, element_type)
+				if unified_element_type == null:
+					generate_ast_error(e, "incompatible types with rest of vector. did you mean to use a list?")
+					return null
+			var use_ints: bool
+			if unified_element_type.type == TYPE_FLOAT:
+				use_ints = true
+			elif unified_element_type.type == TYPE_INT:
+				use_ints = false
+			else:
+				generate_ast_error(vector_expr, "types of elements were not numbers. did you mean to use a list?")
+				return null
+			var ti := TypeInfo.new()
+			match vector_expr.elements.size():
+				2:
+					ti.type = TYPE_VECTOR2I if use_ints else TYPE_VECTOR2
+				3:
+					ti.type = TYPE_VECTOR3I if use_ints else TYPE_VECTOR3
+				4:
+					ti.type = TYPE_VECTOR4I if use_ints else TYPE_VECTOR4
+				_:
+					assert(false)
+			return ti
+
+		if expr is ListExpr:
+			var ti := TypeInfo.new()
+			ti.type = TYPE_ARRAY
+			return ti
+		assert(false)
+		return null
+
+	func check_command(env: Env, command: Command) -> void:
+		if not command.command in env.methods:
+			generate_ast_error(command, "unknown command {command}")
+			return
+
+		var method := env.methods[command.command]
+		if command.args.size() < method.arguments.size():
+			generate_ast_error(command, "too few arguments for {command}")
+			return
+		elif command.args.size() > method.arguments.size():
+			generate_ast_error(command, "too many arguments for {command}")
+			return
+
+	func generate_ast_error(node: ASTNode, message: String) -> void:
+		var range_min := INT64_MAX
+		var range_max := 0
+		for tok in node.data:
+			range_min = mini(tok.loc.x, range_min)
+			range_max = maxi(tok.loc.y, range_max)
+		errors.append({
+			RANGE: Vector2i(range_min, range_max),
+			MESSAGE: message.format(node),
+		})
+
+class Env:
+	var methods: Dictionary[StringName, MethodInfo]
+	var variables: Dictionary[StringName, VarInfo]
+
+	func add_method(method: MethodInfo) -> void:
+		methods[method.name] = method
+
+	func add_variable(variable: VarInfo) -> void:
+		variables[variable.name] = variable
+
+	func duplicate() -> Env:
+		var x := Env.new()
+		x.methods = methods.duplicate()
+		x.variables = variables.duplicate()
+		return x
+
+class ASTNode:
+	var data: Array[Token]
+
+class Expr extends ASTNode:
+	var type: TypeInfo
+
+class TextExpr extends Expr:
+	var text: String
+
+	func _to_string() -> String:
+		return "(txt %s)" % text
+
+class IntExpr extends Expr:
+	var num: int
+
+	func _to_string() -> String:
+		return "(num %s)" % num
+
+class FltExpr extends Expr:
+	var num: float
+
+	func _to_string() -> String:
+		return "(num %s)" % num
+
+class VarExpr extends Expr:
+	var name: String
+
+	func _to_string() -> String:
+		return "$%s" % name
+
+class VectorExpr extends Expr:
+	var elements: Array[Expr]
+
+	func _to_string() -> String:
+		return "(%s)" % " ".join(elements)
+
+class ListExpr extends Expr:
+	var elements: Array[Expr]
+
+	func _to_string() -> String:
+		return "[%s]" % " ".join(elements)
+
+class Command extends ASTNode:
+	var command: String
+	var args: Array[Expr]
+
+	func _to_string() -> String:
+		return "(%s %s)" % [command, " ".join(args)]
+
+class TokenizationResult:
+	var tokens: Array[Token]
+	var errors: Array[Dictionary]
+
+	var has_error: bool:
+		set(_value): assert(false)
+		get: return not errors.is_empty()
+
+class MethodInfo:
+	var name: String
+	var arguments: Array[ArgumentInfo]
+	var ret: TypeInfo
+
+	var callable: Callable
+
+class VarInfo:
+	var name: String
+	var type: TypeInfo
+
+class ArgumentInfo extends VarInfo:
+	var optional: bool
+	var optional_default
+
+class TypeInfo:
+	var clazz_name: StringName
+	var type: Variant.Type
+	var hint: PropertyHint
+	var hint_string: String
+	var usage: PropertyUsageFlags

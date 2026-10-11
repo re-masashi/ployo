@@ -1,0 +1,7 @@
+[gd_resource type="Theme" format=3 uid="uid://5l28gssbq22k"]
+
+[ext_resource type="FontFile" uid="uid://qqpjenuyfm3b" path="res://assets/fonts/IosevkaWeb-Regular.ttf" id="1_470mv"]
+
+[resource]
+ConsoleTextEdit/base_type = &"TextEdit"
+ConsoleTextEdit/fonts/font = ExtResource("1_470mv")
