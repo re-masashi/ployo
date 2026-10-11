@@ -16,7 +16,7 @@ var logger: RobertLogger:
 func _ready() -> void:
 	if Engine.is_editor_hint(): return
 
-	var test := 'cmd2 [1 2 3] "7"'
+	var test := 'cmd2 [1 2 3] (6 7 8 9 10)'
 	var tokens := ConsoleLanguage.new().tokenize(test)
 	if tokens.has_error:
 		print(tokens.errors)

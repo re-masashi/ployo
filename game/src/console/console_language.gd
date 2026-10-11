@@ -255,33 +255,6 @@ class Parser:
 class Typechecker:
 	var errors: Array[Dictionary]
 
-	func unify_types(a: TypeInfo, b: TypeInfo) -> TypeInfo:
-		if a != null and b == null:
-			return b
-		elif a == null and b != null:
-			return b
-		elif a == null and b == null:
-			return null
-		elif a.type == b.type:
-			return a
-		elif a.type == TYPE_FLOAT and b.type == TYPE_INT:
-			return a
-		elif a.type == TYPE_INT and b.type == TYPE_FLOAT:
-			return b
-		elif a.type == TYPE_VECTOR2 and b.type == TYPE_VECTOR2I:
-			return a
-		elif a.type == TYPE_VECTOR2I and b.type == TYPE_VECTOR2:
-			return b
-		elif a.type == TYPE_VECTOR3 and b.type == TYPE_VECTOR3I:
-			return a
-		elif a.type == TYPE_VECTOR3I and b.type == TYPE_VECTOR3:
-			return b
-		elif a.type == TYPE_VECTOR4 and b.type == TYPE_VECTOR4I:
-			return a
-		elif a.type == TYPE_VECTOR4I and b.type == TYPE_VECTOR4:
-			return b
-		return null
-
 	func check_expr(env: Env, expr: Expr) -> TypeInfo:
 		if expr is TextExpr:
 			var ti := TypeInfo.new()
@@ -308,50 +281,36 @@ class Typechecker:
 		if expr is VectorExpr:
 			var vector_expr := expr as VectorExpr
 			if vector_expr.elements.size() > 4:
-				generate_ast_error(vector_expr, "vectors cannot be larger than 4")
+				generate_ast_error(vector_expr, "vector larger than 4")
 				return null
 			if vector_expr.elements.size() == 0:
-				generate_ast_error(vector_expr, "vectors cannot be empty")
-				return null
-			if vector_expr.elements.size() == 1:
-				assert(false)
-			var unified_element_type := check_expr(env, vector_expr.elements[0])
-			if unified_element_type == null: return null
-			for e in vector_expr.elements.slice(1):
-				var element_type := check_expr(env, e)
-				if element_type == null: return null
-				unified_element_type = unify_types(unified_element_type, element_type)
-				if unified_element_type == null:
-					generate_ast_error(e, "incompatible types with rest of vector. did you mean to use a list?")
-					return null
-			var use_ints: bool
-			if unified_element_type.type == TYPE_FLOAT:
-				use_ints = true
-			elif unified_element_type.type == TYPE_INT:
-				use_ints = false
-			else:
-				generate_ast_error(vector_expr, "types of elements were not numbers. did you mean to use a list?")
+				generate_ast_error(vector_expr, "empty vector")
 				return null
 			var ti := TypeInfo.new()
 			match vector_expr.elements.size():
 				2:
-					ti.type = TYPE_VECTOR2I if use_ints else TYPE_VECTOR2
+					ti.type = TYPE_VECTOR2
 				3:
-					ti.type = TYPE_VECTOR3I if use_ints else TYPE_VECTOR3
+					ti.type = TYPE_VECTOR3
 				4:
-					ti.type = TYPE_VECTOR4I if use_ints else TYPE_VECTOR4
+					ti.type = TYPE_VECTOR4
 				_:
 					assert(false)
+			for e in vector_expr.elements:
+				if check_expr(env, e) == null: return null
 			return ti
 
 		if expr is ListExpr:
+			var list_expr := expr as ListExpr
 			var ti := TypeInfo.new()
 			ti.type = TYPE_ARRAY
+			for e in list_expr.elements:
+				if check_expr(env, e) == null: return null
 			return ti
 		assert(false)
 		return null
 
-	func check_command(env: Env, command: Command) -> void:
+	func check_command(env: Env, command: Command) -> TypeInfo:
 		if not command.command in env.methods:
 			generate_ast_error(command, "unknown command {command}")
 			return
@@ -363,6 +322,10 @@ class Typechecker:
 		elif command.args.size() > method.arguments.size():
 			generate_ast_error(command, "too many arguments for {command}")
 			return
+
+		for arg in command.args:
+			if check_expr(env, arg) == null: return null
+		return method.ret
 
 	func generate_ast_error(node: ASTNode, message: String) -> void:
 		var range_min := INT64_MAX
