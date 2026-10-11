@@ -252,24 +252,18 @@ class Parser:
 			MESSAGE: message,
 		})
 
-class Typechecker:
+class Executor:
 	var errors: Array[Dictionary]
 
-	func check_expr(env: Env, expr: Expr) -> TypeInfo:
+	func exec_expr(env: Env, expr: Expr) -> Variant:
 		if expr is TextExpr:
-			var ti := TypeInfo.new()
-			ti.type = TYPE_STRING
-			return ti
+			return expr.text
 
 		if expr is IntExpr:
-			var ti := TypeInfo.new()
-			ti.type = TYPE_INT
-			return ti
+			return expr.num
 
 		if expr is FltExpr:
-			var ti := TypeInfo.new()
-			ti.type = TYPE_FLOAT
-			return ti
+			return expr.num
 
 		if expr is VarExpr:
 			var var_expr := expr as VarExpr
@@ -286,31 +280,36 @@ class Typechecker:
 			if vector_expr.elements.size() == 0:
 				generate_ast_error(vector_expr, "empty vector")
 				return null
-			var ti := TypeInfo.new()
 			match vector_expr.elements.size():
 				2:
-					ti.type = TYPE_VECTOR2
+					return Vector2(
+						exec_expr(env, vector_expr.elements[0]),
+						exec_expr(env, vector_expr.elements[1]),
+					)
 				3:
-					ti.type = TYPE_VECTOR3
+					return Vector3(
+						exec_expr(env, vector_expr.elements[0]),
+						exec_expr(env, vector_expr.elements[1]),
+						exec_expr(env, vector_expr.elements[2]),
+					)
 				4:
-					ti.type = TYPE_VECTOR4
+					return Vector4(
+						exec_expr(env, vector_expr.elements[0]),
+						exec_expr(env, vector_expr.elements[1]),
+						exec_expr(env, vector_expr.elements[2]),
+						exec_expr(env, vector_expr.elements[3]),
+					)
 				_:
 					assert(false)
-			for e in vector_expr.elements:
-				if check_expr(env, e) == null: return null
-			return ti
+					return null
 
 		if expr is ListExpr:
 			var list_expr := expr as ListExpr
-			var ti := TypeInfo.new()
-			ti.type = TYPE_ARRAY
-			for e in list_expr.elements:
-				if check_expr(env, e) == null: return null
-			return ti
+			return list_expr.elements.map(func(e): return exec_expr(env, e))
 		assert(false)
 		return null
 
-	func check_command(env: Env, command: Command) -> TypeInfo:
+	func exec_command(env: Env, command: Command) -> Variant:
 		if not command.command in env.methods:
 			generate_ast_error(command, "unknown command {command}")
 			return
@@ -323,9 +322,8 @@ class Typechecker:
 			generate_ast_error(command, "too many arguments for {command}")
 			return
 
-		for arg in command.args:
-			if check_expr(env, arg) == null: return null
-		return method.ret
+		var args := command.args.map(func(e): return exec_expr(env, e))
+		return method.callable.callv(args)
 
 	func generate_ast_error(node: ASTNode, message: String) -> void:
 		var range_min := INT64_MAX
