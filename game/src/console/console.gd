@@ -68,7 +68,7 @@ func _print_error(cmd: String, error: Dictionary, is_first: bool, is_last: bool)
 			print("[color=red]%s%*d | [/color]" % [prefix, line_number_width, line_i + 1] + line)
 		else:
 			print(prefix_w + "[color=red]%*d | [/color]" % [line_number_width, line_i + 1] + line)
-		print(prefix_w + line_number_w + "[color=red] | [/color]" + " ".repeat(start) + "^".repeat(end - start))
+		print(prefix_w + line_number_w + "[color=red] | [/color]" + " ".repeat(start) + "[color=yellow]" + "^".repeat(end - start) + "[/color]")
 	if is_last:
 		print(prefix_w + line_number_w + "[color=red] '- [/color]" + message)
 	else:

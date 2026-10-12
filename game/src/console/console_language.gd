@@ -6,8 +6,8 @@ const MESSAGE := &"message"
 static var _matchers: Dictionary[RegEx, Token.Type] = {
 	RegEx.create_from_string('''^("(?:[^"\\\\]*(?:\\.[^"\\\\]*)*)"|[a-zA-Z_]+[a-zA-Z_0-9\\/-]*)'''):
 		Token.Type.Text,
-	RegEx.create_from_string("^(-?0[xX][0-9a-fA-F]+|-?[0-9]+)E"): Token.Type.Int,
-	RegEx.create_from_string("^([0-9]+\\.?[0-9]*)"): Token.Type.Flt,
+	RegEx.create_from_string("^((?:-?0[xX][0-9a-fA-F]+)|(?:-?[0-9]+))"): Token.Type.Int,
+	RegEx.create_from_string("^([0-9]+\\.[0-9]+)"): Token.Type.Flt,
 	RegEx.create_from_string("^\\$(-?[a-zA-Z_]+[a-zA-Z_0-9/-]*)"): Token.Type.VarRef,
 }
 
@@ -18,6 +18,27 @@ const _SINGLE_CHAR_TOKENS: Dictionary[String, Token.Type] = {
 	")": Token.Type.ParenClose,
 	"{": Token.Type.BraceOpen,
 	"}": Token.Type.BraceClose,
+
+	"+": Token.Type.Add,
+	"-": Token.Type.Sub,
+	"*": Token.Type.Mul,
+	"/": Token.Type.Div,
+	">": Token.Type.Gt,
+	"<": Token.Type.Lt,
+	"&": Token.Type.BitAnd,
+	"|": Token.Type.BitOr,
+	"^": Token.Type.BitXor,
+}
+
+const _TWO_CHAR_TOKENS: Dictionary[String, Token.Type] = {
+	">>": Token.Type.Shr,
+	"<<": Token.Type.Shl,
+	"**": Token.Type.Pow,
+	">=": Token.Type.Gte,
+	"<=": Token.Type.Lte,
+	"==": Token.Type.Eq,
+	"&&": Token.Type.And,
+	"||": Token.Type.Or,
 }
 
 const _NO_RANGE = Vector2i(-1, -1)
@@ -50,6 +71,13 @@ func tokenize(input: String) -> TokenizationResult:
 			if input[i] == "\n":
 				line += 1
 				line_start = i + 1
+		elif i < input.length() - 1 and input.substr(i, 2) in _TWO_CHAR_TOKENS:
+			found_match = true
+			var tk := Token.new()
+			tk.loc = Vector4i(line, line_i, line, line_i + 2)
+			tk.content = input[i]
+			tk.type = _TWO_CHAR_TOKENS[input.substr(i, 2)]
+			r.tokens.append(tk)
 		elif input[i] in _SINGLE_CHAR_TOKENS:
 			found_match = true
 			var tk := Token.new()
@@ -131,7 +159,6 @@ static func get_environment_of(obj: Object, base_class: StringName = obj.get_cla
 
 	return env
 
-
 static func _get_type(member: Dictionary) -> TypeInfo:
 	var type_info := TypeInfo.new()
 	type_info.clazz_name = member.class_name
@@ -154,6 +181,24 @@ class Token:
 		ParenClose,
 		BraceOpen,
 		BraceClose,
+
+		Add,
+		Sub,
+		Mul,
+		Div,
+		Gt,
+		Lt,
+		BitAnd,
+		BitOr,
+		BitXor,
+		Shr,
+		Shl,
+		Pow,
+		Gte,
+		Lte,
+		Eq,
+		And,
+		Or,
 	}
 
 	var loc: Vector4i
@@ -223,8 +268,42 @@ class Parser:
 				generate_token_error(token, "expression expected")
 		return null
 
-	func parse_expr() -> Expr:
+	func parse_prefix() -> Expr:
+		var token := peek()
+		if token != null:
+			match token.type:
+				Token.Type.Add, Token.Type.Sub:
+					consume()
+					var e := PrefixExpr.new()
+					e.data.append(token)
+					e.op = PrefixExpr.get_op(token.type)
+					e.expr = parse_expr()
+					if e.expr == null: return null
+					return e
 		return parse_primary()
+
+	func parse_infix(min_prec := INT64_MIN) -> Expr:
+		var left := parse_prefix()
+		if left == null: return null
+		while true:
+			var next_tk := peek()
+			if next_tk == null: break
+			var op := InfixExpr.get_op(next_tk.type)
+			if op == InfixExpr.Op.None: break # this could possibly be interpreted as function invocation instead question mark?
+			var prec := InfixExpr.prec(op)
+			if prec.x < min_prec:
+				break
+			consume()
+			var right := parse_infix(prec.y)
+			var expr := InfixExpr.new()
+			expr.op = op
+			expr.left = left
+			expr.right = right
+			left = expr
+		return left
+
+	func parse_expr() -> Expr:
+		return parse_infix()
 
 	func parse_command() -> Command:
 		var invocation := Command.new()
@@ -235,7 +314,7 @@ class Parser:
 		invocation.command = next_tk.content
 
 		while peek() and peek().type != Token.Type.Break:
-			var expr := parse_primary()
+			var expr := parse_expr()
 			if check_in_error(): return null
 			invocation.args.append(expr)
 
@@ -260,7 +339,9 @@ class Parser:
 		return tokens[i]
 
 	func consume() -> Token:
-		if i >= tokens.size(): return null
+		if i >= tokens.size():
+			in_error = true
+			return null
 		i += 1
 		return tokens[i - 1]
 
@@ -290,7 +371,7 @@ class Parser:
 
 		errors.append({
 			RANGE: token.loc,
-			MESSAGE: message,
+			MESSAGE: message.format(token),
 		})
 
 class Executor:
@@ -303,95 +384,11 @@ class Executor:
 
 	var errors: Array[Dictionary]
 
-	func exec_expr(env: Env, expr: Expr) -> Variant:
-		if expr is TextExpr:
-			return expr.text
-
-		if expr is IntExpr:
-			return expr.num
-
-		if expr is FltExpr:
-			return expr.num
-
-		if expr is VarExpr:
-			var var_expr := expr as VarExpr
-			if not var_expr.name in env.variables:
-				generate_ast_error(var_expr, "unknown variable `{name}`")
-				return stop_immediately
-			return env.variables[var_expr.name].type
-
-		if expr is VectorExpr:
-			var vector_expr := expr as VectorExpr
-			if vector_expr.elements.size() > 4:
-				generate_ast_error(vector_expr, "vector larger than 4")
-				return stop_immediately
-			if vector_expr.elements.size() == 0:
-				generate_ast_error(vector_expr, "empty vector")
-				return stop_immediately
-			var args: Array
-			for e in vector_expr.elements:
-				var v = exec_expr(env, e)
-				if stop(v): return stop_immediately
-				args.append(v)
-			match vector_expr.elements.size():
-				2:
-					return Vector2(args[0], args[1])
-				3:
-					return Vector3(args[0], args[1], args[2])
-				4:
-					return Vector4(args[0], args[1], args[2], args[3])
-				_:
-					assert(false)
-					return stop_immediately
-
-		if expr is ListExpr:
-			var list_expr := expr as ListExpr
-			var args: Array
-			for e in list_expr.elements:
-				var v = exec_expr(env, e)
-				if stop(v): return stop_immediately
-				args.append(v)
-			return args
-		assert(false)
-		return stop_immediately
-
-	func exec_command(env: Env, command: Command) -> Variant:
-		if not command.command in env.methods:
-			generate_ast_error(command, "unknown command {command}")
-			return stop_immediately
-
-		var method := env.methods[command.command]
-		if command.args.size() < method.arguments.size():
-			generate_ast_error(command, "too few arguments for {command} (missing %s)" % ", ".join(method.arguments.slice(command.args.size()).map(func(e): return e.name)))
-			return stop_immediately
-		elif command.args.size() > method.arguments.size():
-			generate_ast_error(command, "too many arguments for {command}")
-			return stop_immediately
-
-		var args: Array
-		for e in command.args:
-			var v = exec_expr(env, e)
-			if stop(v): return stop_immediately
-			args.append(v)
-
-		var logger := _ErrorCapturingLogger.new()
-		OS.add_logger(logger)
-		var result
-		if method.callable.get_object() and method.callable.get_method():
-			result = method.callable.get_object().callv(method.callable.get_method(), args)
-		else:
-			result = method.callable.callv(args)
-		OS.remove_logger(logger)
-		if logger.captured_error:
-			generate_ast_error(command.args[logger.position - 1], "cannot convert from %s to %s" % [logger.from_type, logger.to_type])
-			return stop_immediately
-		return result
-
 	func exec_file(env: Env, file: File) -> Variant:
 		for statement in file.statements:
 			var cmd := statement as Command
 			if cmd:
-				if stop(exec_command(env, cmd)): return stop_immediately
+				if stop(cmd.compute(self, env)): return stop_immediately
 
 		return null
 
@@ -413,23 +410,6 @@ class Executor:
 	static func stop(v) -> bool:
 		return v is RefCounted and v == stop_immediately
 
-	class _ErrorCapturingLogger extends Logger:
-		static var _error_decoder := RegEx.create_from_string(r'''Cannot convert argument (\d+) from ([a-zA-Z0-9_\[\]-]+) to ([a-zA-Z0-9_\[\]-]+)''')
-
-		var captured_error: bool
-		var position: int
-		var from_type: String
-		var to_type: String
-
-		@warning_ignore("unused_parameter")
-		func _log_error(function: String, file: String, line: int, code: String, rationale: String, editor_notify: bool, error_type: int, script_backtraces: Array[ScriptBacktrace]) -> void:
-			var m := _error_decoder.search(rationale)
-			if m != null:
-				captured_error = true
-				position = m.get_string(1).to_int()
-				from_type = m.get_string(2)
-				to_type = m.get_string(3)
-
 class Env:
 	var methods: Dictionary[StringName, MethodInfo]
 	var variables: Dictionary[StringName, VarInfo]
@@ -446,11 +426,22 @@ class Env:
 		x.variables = variables.duplicate()
 		return x
 
-class ASTNode:
+@abstract class ASTNode:
 	var data: Array[Token]
 
-class Expr extends ASTNode:
+	@abstract func compute(e: Executor, env: Env) -> Variant
+
+	static func compute_list(e: Executor, env: Env, list: Array[Expr]) -> Variant:
+		var args: Array
+		for arg in list:
+			var v = arg.compute(e, env)
+			if Executor.stop(v): return Executor.stop_immediately
+			args.append(v)
+		return args
+
+@abstract class Expr extends ASTNode:
 	var type: TypeInfo
+
 
 class TextExpr extends Expr:
 	var text: String
@@ -458,11 +449,17 @@ class TextExpr extends Expr:
 	func _to_string() -> String:
 		return "(txt %s)" % text
 
+	func compute(_e: Executor, _env: Env) -> Variant:
+		return text
+
 class IntExpr extends Expr:
 	var num: int
 
 	func _to_string() -> String:
 		return "(num %s)" % num
+
+	func compute(_e: Executor, _env: Env) -> Variant:
+		return num
 
 class FltExpr extends Expr:
 	var num: float
@@ -470,11 +467,17 @@ class FltExpr extends Expr:
 	func _to_string() -> String:
 		return "(num %s)" % num
 
+	func compute(_e: Executor, _env: Env) -> Variant:
+		return num
+
 class VarExpr extends Expr:
 	var name: String
 
 	func _to_string() -> String:
 		return "$%s" % name
+
+	func compute(_e: Executor, _env: Env) -> Variant:
+		return name
 
 class VectorExpr extends Expr:
 	var elements: Array[Expr]
@@ -482,21 +485,253 @@ class VectorExpr extends Expr:
 	func _to_string() -> String:
 		return "(%s)" % " ".join(elements)
 
+	func compute(e: Executor, env: Env) -> Variant:
+		if elements.size() > 4:
+			e.generate_ast_error(self, "vector larger than 4")
+			return Executor.stop_immediately
+		if elements.size() == 0:
+			e.generate_ast_error(self, "empty vector")
+			return Executor.stop_immediately
+		var args = compute_list(e, env, elements)
+		if Executor.stop(args): return Executor.stop_immediately
+		match elements.size():
+			2:
+				return Vector2(args[0], args[1])
+			3:
+				return Vector3(args[0], args[1], args[2])
+			4:
+				return Vector4(args[0], args[1], args[2], args[3])
+			_:
+				assert(false)
+				return Executor.stop_immediately
+
 class ListExpr extends Expr:
 	var elements: Array[Expr]
 
 	func _to_string() -> String:
 		return "[%s]" % " ".join(elements)
 
-class Statement extends ASTNode:
+	func compute(e: Executor, env: Env) -> Variant:
+		return compute_list(e, env, elements)
+
+class PrefixExpr extends Expr:
+	const COMPATIBLE_TYPES: PackedInt32Array = [
+		# atomic types
+		#TYPE_BOOL,
+		TYPE_INT,
+		TYPE_FLOAT,
+		TYPE_STRING,
+		# math types
+		TYPE_VECTOR2,
+		TYPE_VECTOR2I,
+		TYPE_RECT2,
+		TYPE_RECT2I,
+		TYPE_VECTOR3,
+		TYPE_VECTOR3I,
+		TYPE_TRANSFORM2D,
+		TYPE_VECTOR4,
+		TYPE_VECTOR4I,
+		TYPE_PLANE,
+		TYPE_QUATERNION,
+		TYPE_AABB,
+		TYPE_BASIS,
+		TYPE_TRANSFORM3D,
+		TYPE_PROJECTION,
+		# misc types
+		TYPE_COLOR,
+		#TYPE_STRING_NAME,
+		#TYPE_NODE_PATH,
+		#TYPE_RID,
+		#TYPE_OBJECT,
+		#TYPE_CALLABLE,
+		#TYPE_SIGNAL,
+		#TYPE_DICTIONARY,
+		#TYPE_ARRAY,
+		# typed arrays
+		#TYPE_PACKED_BYTE_ARRAY,
+		#TYPE_PACKED_INT32_ARRAY,
+		#TYPE_PACKED_INT64_ARRAY,
+		#TYPE_PACKED_FLOAT32_ARRAY,
+		#TYPE_PACKED_FLOAT64_ARRAY,
+		#TYPE_PACKED_STRING_ARRAY,
+		#TYPE_PACKED_VECTOR2_ARRAY,
+		#TYPE_PACKED_VECTOR3_ARRAY,
+		#TYPE_PACKED_COLOR_ARRAY,
+		#TYPE_PACKED_VECTOR4_ARRAY,
+	]
+
+	enum Op {
+		Add,
+		Sub,
+	}
+
+	var op: Op
+	var expr: Expr
+
+	static func get_op(tk: Token.Type) -> Op:
+		if tk == Token.Type.Sub:
+			return Op.Sub
+		else:
+			return Op.Add
+
+	func compute(e: Executor, env: Env) -> Variant:
+		var value = expr.compute(e, env)
+		if Executor.stop(value): return Executor.stop_immediately
+		if value in COMPATIBLE_TYPES:
+			if op == Op.Add:
+				return +value
+			else:
+				return -value
+
+		e.generate_ast_error(self, "incompatible type for " + Op.find_key(op).to_lower())
+		return Executor.stop_immediately
+
+class InfixExpr extends Expr:
+	const LEFT = -1
+	const RIGHT = 1
+
+	enum Op {
+		None,
+		Add =     LEFT * (15 << 5) | 0,
+		Sub =     LEFT * (15 << 5) | 1,
+		Mul =     LEFT * (16 << 5) | 2,
+		Div =     LEFT * (16 << 5) | 3,
+		Shr =    RIGHT * (17 << 5) | 4,
+		Shl =    RIGHT * (17 << 5) | 5,
+		Pow =    RIGHT * (17 << 5) | 6,
+		Gt =      LEFT * (12 << 5) | 7,
+		Lt =      LEFT * (12 << 5) | 8,
+		Gte =     LEFT * (12 << 5) | 9,
+		Lte =     LEFT * (12 << 5) | 10,
+		Eq =      LEFT * (12 << 5) | 11,
+		And =    RIGHT * ( 2 << 5) | 12,
+		Or =     RIGHT * ( 1 << 5) | 13,
+		BitAnd = RIGHT * (11 << 5) | 14,
+		BitOr =  RIGHT * (10 << 5) | 15,
+		BitXor = RIGHT * (13 << 5) | 16,
+	}
+
+	const OP_STRINGS: Dictionary[Op, String] = {
+		Op.Add: "+",
+		Op.Sub: "-",
+		Op.Mul: "*",
+		Op.Div: "/",
+		Op.Shr: ">>",
+		Op.Shl: "<<",
+		Op.Pow: "**",
+		Op.Gt: ">",
+		Op.Lt: "<",
+		Op.Gte: ">=",
+		Op.Lte: "<=",
+		Op.Eq: "==",
+		Op.And: "&&",
+		Op.Or: "||",
+		Op.BitAnd: "&",
+		Op.BitOr: "|",
+		Op.BitXor: "^",
+	}
+
+	var op: Op
+	var left: Expr
+	var right: Expr
+
+	static func get_op(tk: Token.Type) -> Op:
+		if   tk == Token.Type.Add: return Op.Add
+		elif tk == Token.Type.Sub: return Op.Sub
+		elif tk == Token.Type.Mul: return Op.Mul
+		elif tk == Token.Type.Div: return Op.Div
+		elif tk == Token.Type.Shr: return Op.Shr
+		elif tk == Token.Type.Shl: return Op.Shl
+		elif tk == Token.Type.Pow: return Op.Pow
+		elif tk == Token.Type.Gt: return Op.Gt
+		elif tk == Token.Type.Lt: return Op.Lt
+		elif tk == Token.Type.Gte: return Op.Gte
+		elif tk == Token.Type.Lte: return Op.Lte
+		elif tk == Token.Type.Eq: return Op.Eq
+		elif tk == Token.Type.And: return Op.And
+		elif tk == Token.Type.Or: return Op.Or
+		elif tk == Token.Type.BitAnd: return Op.BitAnd
+		elif tk == Token.Type.BitOr: return Op.BitOr
+		elif tk == Token.Type.BitXor: return Op.BitXor
+		return Op.None
+
+	@warning_ignore("shadowed_variable")
+	static func prec(op: Op) -> Vector2i:
+		var assoc := signi(op)
+		var p := ((op & ~0b11111) * assoc) >> 5
+		if assoc == LEFT:
+			return Vector2i(p * 2, p * 2 + 1)
+		else:
+			return Vector2i(p * 2 + 1, p * 2)
+
+	func compute(e: Executor, env: Env) -> Variant:
+		var expr := Expression.new()
+		expr.parse("a %s b" % OP_STRINGS[op], ["a", "b"])
+		var list = compute_list(e, env, [left, right])
+		if Executor.stop(list): return Executor.stop_immediately
+
+		var result = expr.execute(list)
+		if expr.has_execute_failed():
+			e.generate_ast_error(self, expr.get_error_text())
+			return Executor.stop_immediately
+		return result
+
+@abstract class Statement extends ASTNode:
 	pass
 
 class Command extends Statement:
 	var command: String
 	var args: Array[Expr]
 
+	func compute(e: Executor, env: Env) -> Variant:
+		if not command in env.methods:
+			e.generate_ast_error(self, "unknown command {command}")
+			return Executor.stop_immediately
+
+		var method := env.methods[command]
+		if args.size() < method.arguments.size():
+			e.generate_ast_error(self, "too few arguments for {command} (missing %s)" % ", ".join(method.arguments.slice(args.size()).map(func(arg): return arg.name)))
+			return Executor.stop_immediately
+		elif args.size() > method.arguments.size():
+			e.generate_ast_error(self, "too many arguments for {command}")
+			return Executor.stop_immediately
+
+		var arg_values_result = compute_list(e, env, args)
+		if Executor.stop(arg_values_result): return Executor.stop_immediately
+		var arg_values: Array = arg_values_result
+
+		var logger := _ErrorCapturingLogger.new()
+		OS.add_logger(logger)
+		var result
+		if method.callable.get_object() and method.callable.get_method():
+			result = method.callable.get_object().callv(method.callable.get_method(), arg_values)
+		else:
+			result = method.callable.callv(arg_values)
+		OS.remove_logger(logger)
+		if logger.captured_error:
+			e.generate_ast_error(args[logger.position - 1], "cannot convert from %s to %s" % [logger.from_type, logger.to_type])
+			return Executor.stop_immediately
+		return result
+
 	func _to_string() -> String:
 		return "(%s %s)" % [command, " ".join(args)]
+
+	class _ErrorCapturingLogger extends Logger:
+		static var _error_decoder := RegEx.create_from_string(r'''Cannot convert argument (\d+) from ([a-zA-Z0-9_\[\]-]+) to ([a-zA-Z0-9_\[\]-]+)''')
+
+		var captured_error: bool
+		var position: int
+		var from_type: String
+		var to_type: String
+
+		@warning_ignore("unused_parameter")
+		func _log_error(function: String, file: String, line: int, code: String, rationale: String, editor_notify: bool, error_type: int, script_backtraces: Array[ScriptBacktrace]) -> void:
+			var m := _error_decoder.search(rationale)
+			if m != null:
+				captured_error = true
+				position = m.get_string(1).to_int()
+				from_type = m.get_string(2)
+				to_type = m.get_string(3)
 
 class File:
 	var statements: Array[Statement]
