@@ -29,6 +29,7 @@ func execute_command(command: String) -> void:
 	if not parser.errors.is_empty():
 		_print_errors(command, parser.errors)
 		return
+	print(file)
 	var exec := ConsoleLanguage.Executor.new()
 	var obj := preload("test_commands.gd").new()
 	var result = exec.exec_file(ConsoleLanguage.get_environment_of(obj), file)

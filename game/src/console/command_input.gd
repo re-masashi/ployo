@@ -1,7 +1,19 @@
 @tool
 class_name CommandInput extends CodeEdit
 
-const KEYWORDS: PackedStringArray = ["if", "for", "end", "return", "fun", "var"]
+const KEYWORDS: PackedStringArray = [
+	"if",
+	"for",
+	"end",
+	"fun",
+	"var",
+	"else",
+	"true",
+	"false",
+	"break",
+	"return",
+	"continue",
+]
 
 signal command_submitted(text: String)
 
@@ -64,8 +76,8 @@ func _gui_input(event: InputEvent) -> void:
 
 func _on_text_changed() -> void:
 	var line_count := get_line_count()
-	height_in_lines = clampi(line_count, 1, 4)
-	gutters_draw_line_numbers = line_count >= 4
+	height_in_lines = clampi(line_count, 1, 10)
+	gutters_draw_line_numbers = line_count >= 3
 
 func _update_minimum_size() -> void:
 	if font == null or font_size <= 0:

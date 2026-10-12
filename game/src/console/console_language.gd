@@ -13,7 +13,7 @@ static var _matchers: Dictionary[RegEx, Token.Type] = {
 	RegEx.create_from_string("^\\$(-?[a-zA-Z_]+[a-zA-Z_0-9/-]*)"): Token.Type.VarRef,
 }
 
-const _SINGLE_CHAR_TOKENS: Dictionary[String, Token.Type] = {
+const _LITERAL_TOKENS: Dictionary[String, Token.Type] = {
 	"[": Token.Type.BracketOpen,
 	"]": Token.Type.BracketClose,
 	"(": Token.Type.ParenOpen,
@@ -30,9 +30,7 @@ const _SINGLE_CHAR_TOKENS: Dictionary[String, Token.Type] = {
 	"&": Token.Type.BitAnd,
 	"|": Token.Type.BitOr,
 	"^": Token.Type.BitXor,
-}
 
-const _TWO_CHAR_TOKENS: Dictionary[String, Token.Type] = {
 	">>": Token.Type.Shr,
 	"<<": Token.Type.Shl,
 	"**": Token.Type.Pow,
@@ -42,6 +40,21 @@ const _TWO_CHAR_TOKENS: Dictionary[String, Token.Type] = {
 	"!=": Token.Type.Neq,
 	"&&": Token.Type.And,
 	"||": Token.Type.Or,
+
+	"if": Token.Type.KwIf,
+
+	"for": Token.Type.KwFor,
+	"end": Token.Type.KwEnd,
+	"fun": Token.Type.KwFun,
+	"var": Token.Type.KwVar,
+
+	"else": Token.Type.KwElse,
+	"true": Token.Type.KwTrue,
+	"false": Token.Type.KwFalse,
+
+	"break": Token.Type.KwBreak,
+	"return": Token.Type.KwReturn,
+	"continue": Token.Type.KwContinue,
 }
 
 const _NO_RANGE = Vector2i(-1, -1)
@@ -74,40 +87,43 @@ func tokenize(input: String) -> TokenizationResult:
 			if input[i] == "\n":
 				line += 1
 				line_start = i + 1
-		elif i < input.length() - 1 and input.substr(i, 2) in _TWO_CHAR_TOKENS:
-			found_match = true
-			var tk := Token.new()
-			tk.loc = Vector4i(line, line_i, line, line_i + 2)
-			tk.content = input[i]
-			tk.type = _TWO_CHAR_TOKENS[input.substr(i, 2)]
-			r.tokens.append(tk)
-		elif input[i] in _SINGLE_CHAR_TOKENS:
-			found_match = true
-			var tk := Token.new()
-			tk.loc = Vector4i(line, line_i, line, line_i + 1)
-			tk.content = input[i]
-			tk.type = _SINGLE_CHAR_TOKENS[input[i]]
-			r.tokens.append(tk)
 		else:
-			var substr := input.substr(i)
-			var longest_token: Token = null
-			var longest_token_length: int = 0
-			for matcher in _matchers:
-				var m := matcher.search(substr)
-				if m == null:
-					continue
-				found_match = true
-				var end := m.get_end()
-				if end > longest_token_length:
-					if longest_token == null:
-						longest_token = Token.new()
-					longest_token_length = end
-					longest_token.loc = Vector4i(line, line_i, line, line_i + end)
-					longest_token.content = m.get_string(1)
-					longest_token.type = _matchers[matcher]
-			if longest_token != null:
-				r.tokens.append(longest_token)
-				i += longest_token_length - 1
+			for token in _LITERAL_TOKENS:
+				if i < input.length() - token.length() + 1 and input.substr(i, token.length()) == token:
+					found_match = true
+					if not r.tokens.is_empty() and token == "if" and r.tokens[-1].type == Token.Type.KwElse:
+						# if an `if` token follows an `else` with nothing in between, turn it into `else if` (one token)
+						r.tokens[-1].content = "else if"
+						r.tokens[-1].loc.w = line_i + token.length()
+						r.tokens[-1].type = Token.Type.KwElseIf
+					else:
+						var tk := Token.new()
+						tk.loc = Vector4i(line, line_i, line, line_i + token.length())
+						tk.content = token
+						tk.type = _LITERAL_TOKENS[token]
+						r.tokens.append(tk)
+					i += token.length() - 1
+					break
+			if found_match == false:
+				var substr := input.substr(i)
+				var longest_token: Token = null
+				var longest_token_length: int = 0
+				for matcher in _matchers:
+					var m := matcher.search(substr)
+					if m == null:
+						continue
+					found_match = true
+					var end := m.get_end()
+					if end > longest_token_length:
+						if longest_token == null:
+							longest_token = Token.new()
+						longest_token_length = end
+						longest_token.loc = Vector4i(line, line_i, line, line_i + end)
+						longest_token.content = m.get_string(1)
+						longest_token.type = _matchers[matcher]
+				if longest_token != null:
+					r.tokens.append(longest_token)
+					i += longest_token_length - 1
 		if not found_match and range_start == _NO_RANGE:
 			range_start = Vector2i(line, line_i)
 		if found_match and range_start != _NO_RANGE:
@@ -205,6 +221,20 @@ class Token:
 		And,
 		Or,
 		Not,
+
+		KwIf,
+		KwFor,
+		KwEnd,
+		KwFun,
+		KwVar,
+		KwElse,
+		KwTrue,
+		KwFalse,
+		KwBreak,
+		KwReturn,
+		KwContinue,
+
+		KwElseIf,
 	}
 
 	var loc: Vector4i
@@ -220,6 +250,7 @@ class Parser:
 		Token.Type.ParenClose,
 		Token.Type.BraceClose,
 		Token.Type.Break,
+		Token.Type.KwEnd,
 	]
 
 	var tokens: Array[Token]
@@ -344,6 +375,58 @@ class Parser:
 		return invocation
 
 	func parse_statement() -> Statement:
+		var tk := peek()
+		if tk == null:
+			in_error = true
+			generate_expected_error("expected statement")
+			return null
+		match tk.type:
+			Token.Type.KwIf:
+				consume()
+				var if_stmt := IfStatement.new()
+				if_stmt.data.append(tk)
+				if_stmt.condition = parse_expr()
+				if if_stmt.condition == null: return null
+				consume_ty(Token.Type.Break)
+				if check_in_error("line break expected"): return null
+				var body := CompoundStatement.new()
+				if_stmt.body = body
+				var toplevel_if := if_stmt
+				while true:
+					var next := peek()
+					if next == null: break
+					if next.type == Token.Type.KwElseIf:
+						if if_stmt.else_body != null:
+							generate_token_error(next, "unexpected `else if`")
+						consume()
+						var next_if := IfStatement.new()
+						next_if.data.append(next)
+						next_if.condition = parse_expr()
+						if next_if.condition == null: return null
+						consume_ty(Token.Type.Break)
+						if check_in_error("line break expected"): return null
+						if_stmt.else_body = next_if
+						if_stmt = next_if
+						body = CompoundStatement.new()
+						next_if.body = body
+					elif next.type == Token.Type.KwElse:
+						consume()
+						consume_ty(Token.Type.Break)
+						if check_in_error("line break expected"): return null
+						body = CompoundStatement.new()
+						if_stmt.else_body = body
+					elif next.type == Token.Type.KwEnd:
+						break
+
+					var stmt := parse_statement()
+					consume_ty(Token.Type.Break)
+					if check_in_error("line break expected"): return null
+					if stmt == null: return null
+					body.statements.append(stmt)
+				consume_ty(Token.Type.KwEnd)
+				if check_in_error("`end` expected"): return null
+				return toplevel_if
+
 		var cmd := parse_expr()
 		if cmd == null: return null
 		var expr_stmt := ExprStatement.new()
@@ -497,14 +580,26 @@ class FltExpr extends Expr:
 	func compute(_e: Executor, _env: Env) -> Variant:
 		return num
 
+class BoolExpr extends Expr:
+	var value: bool
+
+	func _to_string() -> String:
+		return "(bool %s)" % value
+
+	func compute(_e: Executor, _env: Env) -> Variant:
+		return value
+
 class VarExpr extends Expr:
 	var name: String
 
 	func _to_string() -> String:
 		return "$%s" % name
 
-	func compute(_e: Executor, _env: Env) -> Variant:
-		return name
+	func compute(e: Executor, env: Env) -> Variant:
+		if name in env.variables:
+			return env.variables[name]
+		e.generate_ast_error(self, "unknown variable {name}")
+		return Executor.stop_immediately
 
 class VectorExpr extends Expr:
 	var elements: Array[Expr]
@@ -717,16 +812,6 @@ class InfixExpr extends Expr:
 	func _to_string() -> String:
 		return "(%s %s %s)" % [Op.find_key(op), left, right]
 
-@abstract class Statement extends ASTNode:
-	pass
-
-class ExprStatement extends Statement:
-	var expr: Expr
-
-	func compute(e: Executor, env: Env) -> Variant:
-		var value = expr.compute(e, env)
-		return value
-
 class CommandExpr extends Expr:
 	var command: String
 	var args: Array[Expr]
@@ -780,6 +865,53 @@ class CommandExpr extends Expr:
 				position = m.get_string(1).to_int()
 				from_type = m.get_string(2)
 				to_type = m.get_string(3)
+
+@abstract class Statement extends ASTNode:
+	pass
+
+class CompoundStatement extends Statement:
+	var statements: Array[Statement]
+
+	func compute(e: Executor, env: Env) -> Variant:
+		var new_env := env.duplicate()
+		for stmt in statements:
+			if Executor.stop(stmt.compute(e, new_env)):
+				return Executor.stop_immediately
+		return null
+
+	func _to_string() -> String:
+		return "\n".join(statements)
+
+class ExprStatement extends Statement:
+	var expr: Expr
+
+	func compute(e: Executor, env: Env) -> Variant:
+		var value = expr.compute(e, env)
+		return value
+
+	func _to_string() -> String:
+		return expr.to_string()
+
+class IfStatement extends Statement:
+	var condition: Expr
+	var body: Statement
+	var else_body: Statement
+
+	func compute(e: Executor, env: Env) -> Variant:
+		var cond = condition.compute(e, env) if condition != null else true
+		if Executor.stop(cond): return Executor.stop_immediately
+		if cond:
+			body.compute(e, env)
+		elif else_body != null:
+			else_body.compute(e, env)
+		return null
+
+	func _to_string() -> String:
+		return "if %s\n  %s\nelse\n  %s\nend" % [
+			condition,
+			str(body).replace("\n", "\n  "),
+			str(else_body).replace("\n", "\n  "),
+		]
 
 class File:
 	var statements: Array[Statement]
