@@ -4,8 +4,10 @@ const RANGE := &"range"
 const MESSAGE := &"message"
 
 static var _matchers: Dictionary[RegEx, Token.Type] = {
-	RegEx.create_from_string('''^("(?:[^"\\\\]*(?:\\.[^"\\\\]*)*)"|[a-zA-Z_]+[a-zA-Z_0-9\\/-]*)'''):
-		Token.Type.Text,
+	RegEx.create_from_string('''^([a-zA-Z_]+[a-zA-Z_0-9\\/-]*)'''):
+		Token.Type.Word,
+	RegEx.create_from_string('''^("(?:[^"\\\\]*(?:\\.[^"\\\\]*)*)")'''):
+		Token.Type.Str,
 	RegEx.create_from_string("^((?:-?0[xX][0-9a-fA-F]+)|(?:-?[0-9]+))"): Token.Type.Int,
 	RegEx.create_from_string("^([0-9]+\\.[0-9]+)"): Token.Type.Flt,
 	RegEx.create_from_string("^\\$(-?[a-zA-Z_]+[a-zA-Z_0-9/-]*)"): Token.Type.VarRef,
@@ -37,6 +39,7 @@ const _TWO_CHAR_TOKENS: Dictionary[String, Token.Type] = {
 	">=": Token.Type.Gte,
 	"<=": Token.Type.Lte,
 	"==": Token.Type.Eq,
+	"!=": Token.Type.Neq,
 	"&&": Token.Type.And,
 	"||": Token.Type.Or,
 }
@@ -170,7 +173,8 @@ static func _get_type(member: Dictionary) -> TypeInfo:
 
 class Token:
 	enum Type {
-		Text,
+		Word,
+		Str,
 		Int,
 		Flt,
 		Break,
@@ -197,8 +201,10 @@ class Token:
 		Gte,
 		Lte,
 		Eq,
+		Neq,
 		And,
 		Or,
+		Not,
 	}
 
 	var loc: Vector4i
@@ -209,6 +215,13 @@ class Token:
 		return "%s (%s)" % [content, Type.find_key(type)]
 
 class Parser:
+	const _CMD_ENDING_TOKENS: PackedInt32Array = [
+		Token.Type.BracketClose,
+		Token.Type.ParenClose,
+		Token.Type.BraceClose,
+		Token.Type.Break,
+	]
+
 	var tokens: Array[Token]
 	var errors: Array[Dictionary]
 
@@ -219,7 +232,16 @@ class Parser:
 		var token := consume()
 		if check_in_error("expression expected"): return null
 		match token.type:
-			Token.Type.Text:
+			Token.Type.Word:
+				var e := CommandExpr.new()
+				e.data.append(token)
+				e.command = token.content
+				while i < tokens.size() and peek().type not in _CMD_ENDING_TOKENS:
+					var expr := parse_expr()
+					if check_in_error(): return null
+					e.args.append(expr)
+				return e
+			Token.Type.Str:
 				var e := TextExpr.new()
 				e.data.append(token)
 				e.text = token.content
@@ -289,7 +311,7 @@ class Parser:
 			var next_tk := peek()
 			if next_tk == null: break
 			var op := InfixExpr.get_op(next_tk.type)
-			if op == InfixExpr.Op.None: break # this could possibly be interpreted as function invocation instead question mark?
+			if op == InfixExpr.Op.None: break
 			var prec := InfixExpr.prec(op)
 			if prec.x < min_prec:
 				break
@@ -297,6 +319,7 @@ class Parser:
 			var right := parse_infix(prec.y)
 			var expr := InfixExpr.new()
 			expr.op = op
+			expr.data.append(next_tk)
 			expr.left = left
 			expr.right = right
 			left = expr
@@ -305,9 +328,9 @@ class Parser:
 	func parse_expr() -> Expr:
 		return parse_infix()
 
-	func parse_command() -> Command:
-		var invocation := Command.new()
-		var next_tk := consume_ty(Token.Type.Text)
+	func parse_command() -> CommandExpr:
+		var invocation := CommandExpr.new()
+		var next_tk := consume_ty(Token.Type.Word)
 		if check_in_error("command expected"): return null
 
 		invocation.data = [next_tk]
@@ -321,7 +344,11 @@ class Parser:
 		return invocation
 
 	func parse_statement() -> Statement:
-		return parse_command()
+		var cmd := parse_expr()
+		if cmd == null: return null
+		var expr_stmt := ExprStatement.new()
+		expr_stmt.expr = cmd
+		return expr_stmt
 
 	func parse_file() -> File:
 		var file := File.new()
@@ -386,9 +413,9 @@ class Executor:
 
 	func exec_file(env: Env, file: File) -> Variant:
 		for statement in file.statements:
-			var cmd := statement as Command
-			if cmd:
-				if stop(cmd.compute(self, env)): return stop_immediately
+			var value = statement.compute(self, env)
+			if stop(value):
+				return stop_immediately
 
 		return null
 
@@ -561,6 +588,7 @@ class PrefixExpr extends Expr:
 	]
 
 	enum Op {
+		Not,
 		Add,
 		Sub,
 	}
@@ -571,12 +599,16 @@ class PrefixExpr extends Expr:
 	static func get_op(tk: Token.Type) -> Op:
 		if tk == Token.Type.Sub:
 			return Op.Sub
+		if tk == Token.Type.Not:
+			return Op.Not
 		else:
 			return Op.Add
 
 	func compute(e: Executor, env: Env) -> Variant:
 		var value = expr.compute(e, env)
 		if Executor.stop(value): return Executor.stop_immediately
+		if op == Op.Not and value is bool:
+			return not value
 		if typeof(value) in COMPATIBLE_TYPES:
 			if op == Op.Add:
 				return +value
@@ -607,11 +639,12 @@ class InfixExpr extends Expr:
 		Gte =     LEFT * (12 << 5) | 9,
 		Lte =     LEFT * (12 << 5) | 10,
 		Eq =      LEFT * (12 << 5) | 11,
-		And =    RIGHT * ( 2 << 5) | 12,
-		Or =     RIGHT * ( 1 << 5) | 13,
-		BitAnd = RIGHT * (11 << 5) | 14,
-		BitOr =  RIGHT * (10 << 5) | 15,
-		BitXor = RIGHT * (13 << 5) | 16,
+		Neq =     LEFT * (12 << 5) | 12,
+		And =    RIGHT * ( 2 << 5) | 13,
+		Or =     RIGHT * ( 1 << 5) | 14,
+		BitAnd = RIGHT * (11 << 5) | 15,
+		BitOr =  RIGHT * (10 << 5) | 16,
+		BitXor = RIGHT * (13 << 5) | 17,
 	}
 
 	const OP_STRINGS: Dictionary[Op, String] = {
@@ -627,6 +660,7 @@ class InfixExpr extends Expr:
 		Op.Gte: ">=",
 		Op.Lte: "<=",
 		Op.Eq: "==",
+		Op.Neq: "!=",
 		Op.And: "&&",
 		Op.Or: "||",
 		Op.BitAnd: "&",
@@ -651,6 +685,7 @@ class InfixExpr extends Expr:
 		elif tk == Token.Type.Gte: return Op.Gte
 		elif tk == Token.Type.Lte: return Op.Lte
 		elif tk == Token.Type.Eq: return Op.Eq
+		elif tk == Token.Type.Neq: return Op.Neq
 		elif tk == Token.Type.And: return Op.And
 		elif tk == Token.Type.Or: return Op.Or
 		elif tk == Token.Type.BitAnd: return Op.BitAnd
@@ -685,7 +720,14 @@ class InfixExpr extends Expr:
 @abstract class Statement extends ASTNode:
 	pass
 
-class Command extends Statement:
+class ExprStatement extends Statement:
+	var expr: Expr
+
+	func compute(e: Executor, env: Env) -> Variant:
+		var value = expr.compute(e, env)
+		return value
+
+class CommandExpr extends Expr:
 	var command: String
 	var args: Array[Expr]
 

@@ -8,12 +8,6 @@
 
 [sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_hef1m"]
 
-[sub_resource type="CodeHighlighter" id="CodeHighlighter_juhpt"]
-number_color = Color(0.8025055, 0.6622487, 0.49000067, 1)
-symbol_color = Color(0.83106995, 0.83106995, 0.83106995, 1)
-function_color = Color(0.83137256, 0.83137256, 0.83137256, 1)
-member_variable_color = Color(0.83137256, 0.83137256, 0.83137256, 1)
-
 [node name="Console" type="Window" unique_id=185442822]
 oversampling_override = 1.0
 title = "Debug Console"
@@ -53,8 +47,7 @@ custom_minimum_size = Vector2(0, 31)
 layout_mode = 2
 theme_override_styles/normal = SubResource("StyleBoxEmpty_juhpt")
 theme_override_styles/focus = SubResource("StyleBoxEmpty_hef1m")
-text = "cmd2 6 + 7 * 10"
-syntax_highlighter = SubResource("CodeHighlighter_juhpt")
+text = "cmd2 6 + 7"
 delimiter_strings = Array[String](["\" \""])
 auto_brace_completion_enabled = true
 auto_brace_completion_highlight_matching = true
