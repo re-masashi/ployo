@@ -17,3 +17,6 @@ func cmd5(x: Array, y: Array, z: Array) -> void:
 
 func accepts_int(x: Array) -> void:
 	print(x)
+
+func p(x) -> void:
+	print(x)

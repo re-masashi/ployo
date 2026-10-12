@@ -277,7 +277,7 @@ class Parser:
 					var e := PrefixExpr.new()
 					e.data.append(token)
 					e.op = PrefixExpr.get_op(token.type)
-					e.expr = parse_expr()
+					e.expr = parse_primary()
 					if e.expr == null: return null
 					return e
 		return parse_primary()
@@ -577,7 +577,7 @@ class PrefixExpr extends Expr:
 	func compute(e: Executor, env: Env) -> Variant:
 		var value = expr.compute(e, env)
 		if Executor.stop(value): return Executor.stop_immediately
-		if value in COMPATIBLE_TYPES:
+		if typeof(value) in COMPATIBLE_TYPES:
 			if op == Op.Add:
 				return +value
 			else:
@@ -585,6 +585,9 @@ class PrefixExpr extends Expr:
 
 		e.generate_ast_error(self, "incompatible type for " + Op.find_key(op).to_lower())
 		return Executor.stop_immediately
+
+	func _to_string() -> String:
+		return "(%s %s)" % [Op.find_key(op), expr]
 
 class InfixExpr extends Expr:
 	const LEFT = -1
@@ -676,6 +679,9 @@ class InfixExpr extends Expr:
 			return Executor.stop_immediately
 		return result
 
+	func _to_string() -> String:
+		return "(%s %s %s)" % [Op.find_key(op), left, right]
+
 @abstract class Statement extends ASTNode:
 	pass
 
@@ -735,6 +741,9 @@ class Command extends Statement:
 
 class File:
 	var statements: Array[Statement]
+
+	func _to_string() -> String:
+		return "\n".join(statements)
 
 class TokenizationResult:
 	var tokens: Array[Token]
