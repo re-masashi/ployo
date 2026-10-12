@@ -6,8 +6,8 @@ const MESSAGE := &"message"
 static var _matchers: Dictionary[RegEx, Token.Type] = {
 	RegEx.create_from_string('''^("(?:[^"\\\\]*(?:\\.[^"\\\\]*)*)"|[a-zA-Z_]+[a-zA-Z_0-9\\/-]*)'''):
 		Token.Type.Text,
+	RegEx.create_from_string("^(-?0[xX][0-9a-fA-F]+|-?[0-9]+)E"): Token.Type.Int,
 	RegEx.create_from_string("^([0-9]+\\.?[0-9]*)"): Token.Type.Flt,
-	RegEx.create_from_string("^(-?[0-9]+|-?0[xX][0-9a-fA-F]+)"): Token.Type.Int,
 	RegEx.create_from_string("^\\$(-?[a-zA-Z_]+[a-zA-Z_0-9/-]*)"): Token.Type.VarRef,
 }
 
@@ -20,48 +20,75 @@ const _SINGLE_CHAR_TOKENS: Dictionary[String, Token.Type] = {
 	"}": Token.Type.BraceClose,
 }
 
+const _NO_RANGE = Vector2i(-1, -1)
+
 func tokenize(input: String) -> TokenizationResult:
 	var r := TokenizationResult.new()
 	var i := 0
-	var range_start := -1
+	var range_start := _NO_RANGE
+	var line_start := 0
+	var line := 0
 	while i < input.length():
 		var found_match := false
+		var line_i := i - line_start
 		if input[i] == " " or input[i] == "\t":
 			found_match = true
+		elif input[i] == "\n" or input[i] == ";":
+			found_match = true
+			if found_match and range_start != _NO_RANGE:
+				r.errors.append({
+					RANGE: Vector4i(range_start.x, range_start.y, line, line_i),
+					MESSAGE: "invalid token",
+				})
+				range_start = _NO_RANGE
+			if not r.tokens.size() == 0 and r.tokens[-1].type != Token.Type.Break:
+				var tk := Token.new()
+				tk.loc = Vector4i(line, line_i, line, line_i + 1)
+				tk.type = Token.Type.Break
+				tk.content = input[i]
+				r.tokens.append(tk)
+			if input[i] == "\n":
+				line += 1
+				line_start = i + 1
 		elif input[i] in _SINGLE_CHAR_TOKENS:
 			found_match = true
 			var tk := Token.new()
-			tk.loc = Vector2i(i, i + 1)
+			tk.loc = Vector4i(line, line_i, line, line_i + 1)
 			tk.content = input[i]
 			tk.type = _SINGLE_CHAR_TOKENS[input[i]]
 			r.tokens.append(tk)
 		else:
 			var substr := input.substr(i)
+			var longest_token: Token = null
+			var longest_token_length: int = 0
 			for matcher in _matchers:
 				var m := matcher.search(substr)
 				if m == null:
 					continue
 				found_match = true
-				var tk := Token.new()
 				var end := m.get_end()
-				tk.loc = Vector2i(i, i + end)
-				i += end - 1
-				tk.content = m.get_string(1)
-				tk.type = _matchers[matcher]
-				r.tokens.append(tk)
-				break
-		if not found_match and range_start == -1:
-			range_start = i
-		if found_match and range_start != -1:
+				if end > longest_token_length:
+					if longest_token == null:
+						longest_token = Token.new()
+					longest_token_length = end
+					longest_token.loc = Vector4i(line, line_i, line, line_i + end)
+					longest_token.content = m.get_string(1)
+					longest_token.type = _matchers[matcher]
+			if longest_token != null:
+				r.tokens.append(longest_token)
+				i += longest_token_length - 1
+		if not found_match and range_start == _NO_RANGE:
+			range_start = Vector2i(line, line_i)
+		if found_match and range_start != _NO_RANGE:
 			r.errors.append({
-				RANGE: Vector2i(range_start, i),
+				RANGE: Vector4i(range_start.x, range_start.y, line, line_i),
 				MESSAGE: "invalid token",
 			})
-			range_start = -1
+			range_start = _NO_RANGE
 		i += 1
-	if range_start != -1:
+	if range_start != _NO_RANGE:
 		r.errors.append({
-			RANGE: Vector2i(range_start, i),
+			RANGE: Vector4i(range_start.x, range_start.y, line, i - line_start),
 			MESSAGE: "invalid or unterminated token",
 		})
 
@@ -119,6 +146,7 @@ class Token:
 		Text,
 		Int,
 		Flt,
+		Break,
 		VarRef,
 		BracketOpen,
 		BracketClose,
@@ -128,7 +156,7 @@ class Token:
 		BraceClose,
 	}
 
-	var loc: Vector2i
+	var loc: Vector4i
 	var type: Type
 	var content: String
 
@@ -201,17 +229,31 @@ class Parser:
 	func parse_command() -> Command:
 		var invocation := Command.new()
 		var next_tk := consume_ty(Token.Type.Text)
-		if check_in_error("text expected"): return null
+		if check_in_error("command expected"): return null
 
 		invocation.data = [next_tk]
 		invocation.command = next_tk.content
 
-		while i < tokens.size():
+		while peek() and peek().type != Token.Type.Break:
 			var expr := parse_primary()
 			if check_in_error(): return null
 			invocation.args.append(expr)
 
 		return invocation
+
+	func parse_statement() -> Statement:
+		return parse_command()
+
+	func parse_file() -> File:
+		var file := File.new()
+		while i < tokens.size():
+			var statement := parse_statement()
+			if statement == null: return null
+			file.statements.append(statement)
+			if i >= tokens.size(): break
+			consume_ty(Token.Type.Break)
+			if check_in_error("line break expected"): return null
+		return file
 
 	func peek() -> Token:
 		if i >= tokens.size(): return null
@@ -238,9 +280,8 @@ class Parser:
 	func generate_expected_error(message: String) -> void:
 		if message.is_empty(): return
 
-		var location := 0 if i == 0 else tokens[i - 1].loc.y
 		errors.append({
-			RANGE: Vector2i(location, location + 1),
+			RANGE: Vector4i(0, 0, 0, 1) if i == 0 else Vector4i(tokens[i - 1].loc.z, tokens[i - 1].loc.w, tokens[i - 1].loc.z, tokens[i - 1].loc.w + 1),
 			MESSAGE: message,
 		})
 
@@ -317,15 +358,15 @@ class Executor:
 	func exec_command(env: Env, command: Command) -> Variant:
 		if not command.command in env.methods:
 			generate_ast_error(command, "unknown command {command}")
-			return
+			return stop_immediately
 
 		var method := env.methods[command.command]
 		if command.args.size() < method.arguments.size():
-			generate_ast_error(command, "too few arguments for {command}")
-			return
+			generate_ast_error(command, "too few arguments for {command} (missing %s)" % ", ".join(method.arguments.slice(command.args.size()).map(func(e): return e.name)))
+			return stop_immediately
 		elif command.args.size() > method.arguments.size():
 			generate_ast_error(command, "too many arguments for {command}")
-			return
+			return stop_immediately
 
 		var args: Array
 		for e in command.args:
@@ -346,14 +387,26 @@ class Executor:
 			return stop_immediately
 		return result
 
+	func exec_file(env: Env, file: File) -> Variant:
+		for statement in file.statements:
+			var cmd := statement as Command
+			if cmd:
+				if stop(exec_command(env, cmd)): return stop_immediately
+
+		return null
+
 	func generate_ast_error(node: ASTNode, message: String) -> void:
-		var range_min := INT64_MAX
-		var range_max := 0
+		var range_min := Vector2i(INT32_MAX, INT32_MAX)
+		var range_max := Vector2i(0, 0)
 		for tok in node.data:
-			range_min = mini(tok.loc.x, range_min)
-			range_max = maxi(tok.loc.y, range_max)
+			var left := Vector2i(tok.loc.x, tok.loc.y)
+			if left < range_min:
+				range_min = left
+			var right := Vector2i(tok.loc.z, tok.loc.w)
+			if right > range_max:
+				range_max = right
 		errors.append({
-			RANGE: Vector2i(range_min, range_max),
+			RANGE: Vector4i(range_min.x, range_min.y, range_max.x, range_max.y),
 			MESSAGE: message.format(node),
 		})
 
@@ -435,12 +488,18 @@ class ListExpr extends Expr:
 	func _to_string() -> String:
 		return "[%s]" % " ".join(elements)
 
-class Command extends ASTNode:
+class Statement extends ASTNode:
+	pass
+
+class Command extends Statement:
 	var command: String
 	var args: Array[Expr]
 
 	func _to_string() -> String:
 		return "(%s %s)" % [command, " ".join(args)]
+
+class File:
+	var statements: Array[Statement]
 
 class TokenizationResult:
 	var tokens: Array[Token]
