@@ -6,7 +6,7 @@ const MESSAGE := &"message"
 static var _matchers: Dictionary[RegEx, Token.Type] = {
 	RegEx.create_from_string('''^([a-zA-Z_]+[a-zA-Z_0-9\\/-]*)'''):
 		Token.Type.Word,
-	RegEx.create_from_string('''^("(?:[^"\\\\]*(?:\\.[^"\\\\]*)*)")'''):
+	RegEx.create_from_string('''^"([^"\\\\]*(?:\\.[^"\\\\]*)*)"'''):
 		Token.Type.Str,
 	RegEx.create_from_string("^((?:-?0[xX][0-9a-fA-F]+)|(?:-?[0-9]+))"): Token.Type.Int,
 	RegEx.create_from_string("^([0-9]+\\.[0-9]+)"): Token.Type.Flt,
@@ -20,6 +20,17 @@ const _LITERAL_TOKENS: Dictionary[String, Token.Type] = {
 	")": Token.Type.ParenClose,
 	"{": Token.Type.BraceOpen,
 	"}": Token.Type.BraceClose,
+	"==": Token.Type.Eq,
+	"=": Token.Type.Assign,
+
+	">>": Token.Type.Shr,
+	"<<": Token.Type.Shl,
+	"**": Token.Type.Pow,
+	">=": Token.Type.Gte,
+	"<=": Token.Type.Lte,
+	"!=": Token.Type.Neq,
+	"&&": Token.Type.And,
+	"||": Token.Type.Or,
 
 	"+": Token.Type.Add,
 	"-": Token.Type.Sub,
@@ -30,16 +41,6 @@ const _LITERAL_TOKENS: Dictionary[String, Token.Type] = {
 	"&": Token.Type.BitAnd,
 	"|": Token.Type.BitOr,
 	"^": Token.Type.BitXor,
-
-	">>": Token.Type.Shr,
-	"<<": Token.Type.Shl,
-	"**": Token.Type.Pow,
-	">=": Token.Type.Gte,
-	"<=": Token.Type.Lte,
-	"==": Token.Type.Eq,
-	"!=": Token.Type.Neq,
-	"&&": Token.Type.And,
-	"||": Token.Type.Or,
 
 	"if": Token.Type.KwIf,
 
@@ -201,6 +202,7 @@ class Token:
 		ParenClose,
 		BraceOpen,
 		BraceClose,
+		Assign,
 
 		Add,
 		Sub,
@@ -426,6 +428,75 @@ class Parser:
 				consume_ty(Token.Type.KwEnd)
 				if check_in_error("`end` expected"): return null
 				return toplevel_if
+			Token.Type.KwVar:
+				consume()
+				var name := consume_ty(Token.Type.VarRef)
+				if check_in_error("variable expected"): return null
+				consume_ty(Token.Type.Assign)
+				if check_in_error("`=` expected"): return null
+				var var_decl := VarDeclStatement.new()
+				var_decl.data.append(name)
+				var_decl.name = name.content
+				var_decl.value = parse_expr()
+				if var_decl.value == null: return null
+				return var_decl
+			Token.Type.VarRef:
+				var eq := peek(1)
+				if eq and eq.type == Token.Type.Assign:
+					consume()
+					consume()
+					var var_assign := VarAssignmentStatement.new()
+					var_assign.data.append(tk)
+					var_assign.name = tk.content
+					var_assign.value = parse_expr()
+					if var_assign.value == null: return null
+					return var_assign
+			Token.Type.KwReturn:
+				consume()
+				var ret := ReturnStatement.new()
+				ret.data.append(tk)
+				if peek() and peek().type != Token.Type.Break:
+					ret.value = parse_expr()
+					if ret.value == null: return null
+				return ret
+			Token.Type.KwBreak:
+				consume()
+				var brk := BreakStatement.new()
+				brk.data.append(tk)
+				return brk
+			Token.Type.KwContinue:
+				consume()
+				var cont := ContinueStatement.new()
+				cont.data.append(tk)
+				return cont
+			Token.Type.KwFun:
+				consume()
+				var name := consume_ty(Token.Type.Word)
+				if check_in_error("function name expected"): return null
+				var fun := FunStatement.new()
+				fun.name = name.content
+				fun.data.append(name)
+				while peek() and peek().type != Token.Type.Break:
+					var arg_name := consume_ty(Token.Type.VarRef)
+					if check_in_error("parameter name expected"): return null
+					fun.args.append(arg_name.content)
+				consume_ty(Token.Type.Break)
+				if check_in_error("line break expected"): return null
+				var body := CompoundStatement.new()
+				fun.body = body
+				while true:
+					var next := peek()
+					if next == null: break
+					if next.type == Token.Type.KwEnd:
+						break
+					var stmt := parse_statement()
+					consume_ty(Token.Type.Break)
+					if check_in_error("line break expected"): return null
+					if stmt == null: return null
+					body.statements.append(stmt)
+				consume_ty(Token.Type.KwEnd)
+				if check_in_error("`end` expected"): return null
+				return fun
 
 		var cmd := parse_expr()
 		if cmd == null: return null
@@ -444,9 +515,9 @@ class Parser:
 			if check_in_error("line break expected"): return null
 		return file
 
-	func peek() -> Token:
-		if i >= tokens.size(): return null
-		return tokens[i]
+	func peek(offset: int = 0) -> Token:
+		if i + offset >= tokens.size(): return null
+		return tokens[i + offset]
 
 	func consume() -> Token:
 		if i >= tokens.size():
@@ -456,10 +527,14 @@ class Parser:
 		return tokens[i - 1]
 
 	func consume_ty(type: Token.Type) -> Token:
-		var tk := consume()
-		if not tk or tk.type != type:
+		if i >= tokens.size():
 			in_error = true
 			return null
+		var tk := tokens[i]
+		if tk.type != type:
+			in_error = true
+			return null
+		i += 1
 		return tk
 
 	func check_in_error(message: String = "") -> bool:
@@ -491,6 +566,12 @@ class Executor:
 				assert(false)
 				return
 			stop_immediately = value
+	static var halted := RefCounted.new():
+		set(value):
+			if halted != null:
+				assert(false)
+				return
+			halted = value
 
 	var errors: Array[Dictionary]
 
@@ -499,8 +580,17 @@ class Executor:
 			var value = statement.compute(self, env)
 			if stop(value):
 				return stop_immediately
+			if value is _StatementResult:
+				if value.type == _StatementResult.Type.Return:
+						return value.value
+				else:
+					if value.type == _StatementResult.Type.Break:
+						generate_ast_error(value.data, "cannot use `break` outside of a loop")
+					else:
+						generate_ast_error(value.data, "cannot use `continue` outside of a loop")
+					return Executor.stop_immediately
 
-		return null
+		return halted
 
 	func generate_ast_error(node: ASTNode, message: String) -> void:
 		var range_min := Vector2i(INT32_MAX, INT32_MAX)
@@ -597,7 +687,7 @@ class VarExpr extends Expr:
 
 	func compute(e: Executor, env: Env) -> Variant:
 		if name in env.variables:
-			return env.variables[name]
+			return env.variables[name].getter.call()
 		e.generate_ast_error(self, "unknown variable {name}")
 		return Executor.stop_immediately
 
@@ -614,15 +704,35 @@ class VectorExpr extends Expr:
 		if elements.size() == 0:
 			e.generate_ast_error(self, "empty vector")
 			return Executor.stop_immediately
-		var args = compute_list(e, env, elements)
+		var is_float := false
+		var args: Array
+		for arg in elements:
+			var arg_v = arg.compute(e, env)
+			if Executor.stop(arg_v): return Executor.stop_immediately
+			if arg_v is int:
+				continue
+			elif arg_v is float:
+				is_float = true
+			else:
+				e.generate_ast_error(arg, "invalid type for vector `%s`" % type_string(typeof(arg_v)))
+				return Executor.stop_immediately
 		if Executor.stop(args): return Executor.stop_immediately
 		match elements.size():
 			2:
-				return Vector2(args[0], args[1])
+				if is_float:
+					return Vector2(args[0], args[1])
+				else:
+					return Vector2i(args[0], args[1])
 			3:
-				return Vector3(args[0], args[1], args[2])
+				if is_float:
+					return Vector3(args[0], args[1], args[2])
+				else:
+					return Vector3i(args[0], args[1], args[2])
 			4:
-				return Vector4(args[0], args[1], args[2], args[3])
+				if is_float:
+					return Vector4(args[0], args[1], args[2], args[3])
+				else:
+					return Vector4i(args[0], args[1], args[2], args[3])
 			_:
 				assert(false)
 				return Executor.stop_immediately
@@ -836,7 +946,7 @@ class CommandExpr extends Expr:
 		var logger := _ErrorCapturingLogger.new()
 		OS.add_logger(logger)
 		var result
-		if method.callable.get_object() and method.callable.get_method():
+		if method.callable.is_standard() and method.callable.get_object() and method.callable.get_method():
 			result = method.callable.get_object().callv(method.callable.get_method(), arg_values)
 		else:
 			result = method.callable.callv(arg_values)
@@ -875,8 +985,11 @@ class CompoundStatement extends Statement:
 	func compute(e: Executor, env: Env) -> Variant:
 		var new_env := env.duplicate()
 		for stmt in statements:
-			if Executor.stop(stmt.compute(e, new_env)):
+			var value = stmt.compute(e, new_env)
+			if Executor.stop(value):
 				return Executor.stop_immediately
+			if value is _StatementResult:
+				return value
 		return null
 
 	func _to_string() -> String:
@@ -901,9 +1014,13 @@ class IfStatement extends Statement:
 		var cond = condition.compute(e, env) if condition != null else true
 		if Executor.stop(cond): return Executor.stop_immediately
 		if cond:
-			body.compute(e, env)
+			var value = body.compute(e, env)
+			if value is _StatementResult:
+				return value
 		elif else_body != null:
-			else_body.compute(e, env)
+			var value = else_body.compute(e, env)
+			if value is _StatementResult:
+				return value
 		return null
 
 	func _to_string() -> String:
@@ -912,6 +1029,123 @@ class IfStatement extends Statement:
 			str(body).replace("\n", "\n  "),
 			str(else_body).replace("\n", "\n  "),
 		]
+
+class VarDeclStatement extends Statement:
+	var name: String
+	var value: Expr
+
+	func compute(e: Executor, env: Env) -> Variant:
+		var value_value = value.compute(e, env)
+		if Executor.stop(value_value): return Executor.stop_immediately
+
+		var info := VarInfo.new()
+		info.name = name
+		info.type = null
+		_make_storage_for(value_value, info)
+		env.variables[name] = info
+		return null
+
+	static func _make_storage_for(initial_value, info: VarInfo) -> void:
+		var data_holder: Array = [initial_value]
+		info.setter = func(new_value):
+			data_holder[0] = new_value
+		info.getter = func():
+			return data_holder[0]
+
+	func _to_string() -> String:
+		return "var ${name} = {value}".format(self)
+
+class VarAssignmentStatement extends Statement:
+	var name: String
+	var value: Expr
+
+	func compute(e: Executor, env: Env) -> Variant:
+		if name not in env.variables:
+			e.generate_ast_error(self, "unknown variable ${name}")
+			return Executor.stop_immediately
+		var value_value = value.compute(e, env)
+		if Executor.stop(value_value): return Executor.stop_immediately
+		var info := env.variables[name]
+		info.setter.call(value_value)
+		return null
+
+	func _to_string() -> String:
+		return "E${name} = {value}".format(self)
+
+class ReturnStatement extends Statement:
+	var value: Expr
+
+	func compute(e: Executor, env: Env) -> Variant:
+		if value == null:
+			return _StatementResult.new_return(self, null)
+
+		var result = value.compute(e, env)
+		if Executor.stop(result): return Executor.stop_immediately
+
+		return _StatementResult.new_return(self, result)
+
+	func _to_string() -> String:
+		if value == null:
+			return "return"
+		else:
+			return "return " + str(value)
+
+class BreakStatement extends Statement:
+	@warning_ignore("unused_parameter")
+	func compute(e: Executor, env: Env) -> Variant:
+		return _StatementResult.new_break(self)
+
+	func _to_string() -> String:
+		return "break"
+
+class ContinueStatement extends Statement:
+	@warning_ignore("unused_parameter")
+	func compute(e: Executor, env: Env) -> Variant:
+		return _StatementResult.new_continue(self)
+
+	func _to_string() -> String:
+		return "continue"
+
+class FunStatement extends Statement:
+	var name: String
+	var args: PackedStringArray
+	var body: Statement
+
+	func compute(e: Executor, env: Env) -> Variant:
+		var method_info := MethodInfo.new()
+		method_info.name = name
+		env.add_method(method_info)
+		var saved_env := env.duplicate()
+		var arguments: Array[ArgumentInfo]
+		for arg in args:
+			var info := ArgumentInfo.new()
+			info.name = arg
+			arguments.append(info)
+		method_info.arguments = arguments
+		method_info.callable = func(...passed_args):
+			# this should be validated by CommandExpr but just to be safe
+			assert(passed_args.size() == args.size())
+			var new_env := saved_env.duplicate()
+			for arg_i in passed_args.size():
+				var info := VarInfo.new()
+				info.name = args[arg_i]
+				VarDeclStatement._make_storage_for(passed_args[arg_i], info)
+				new_env.add_variable(info)
+			var value = body.compute(e, new_env)
+			if value is _StatementResult:
+				if value.type == _StatementResult.Type.Return:
+					return value.value
+				else:
+					if value.type == _StatementResult.Type.Break:
+						e.generate_ast_error(value.data, "cannot use `break` outside of a loop")
+					else:
+						e.generate_ast_error(value.data, "cannot use `continue` outside of a loop")
+					return Executor.stop_immediately
+			return value
+		return null
+
+	func _to_string() -> String:
+		return "fun %s %s\n  %s\nend" % [name, " ".join(args), str(body).replace("\n", "\n  ")]
 
 class File:
 	var statements: Array[Statement]
@@ -938,6 +1172,9 @@ class VarInfo:
 	var name: String
 	var type: TypeInfo
 
+	var setter: Callable
+	var getter: Callable
+
 class ArgumentInfo extends VarInfo:
 	var optional: bool
 	var optional_default
@@ -948,3 +1185,36 @@ class TypeInfo:
 	var hint: PropertyHint
 	var hint_string: String
 	var usage: PropertyUsageFlags
+
+class _StatementResult:
+	enum Type {
+		Return,
+		Break,
+		Continue,
+	}
+
+	var data: ASTNode
+	var type: Type
+	var value: Variant
+
+	@warning_ignore("shadowed_variable")
+	static func new_return(data: ASTNode, value: Variant) -> _StatementResult:
+		var result := new()
+		result.data = data
+		result.type = Type.Return
+		result.value = value
+		return result
+
+	@warning_ignore("shadowed_variable")
+	static func new_break(data: ASTNode) -> _StatementResult:
+		var result := new()
+		result.data = data
+		result.type = Type.Break
+		return result
+
+	@warning_ignore("shadowed_variable")
+	static func new_continue(data: ASTNode) -> _StatementResult:
+		var result := new()
+		result.data = data
+		result.type = Type.Continue
+		return result

@@ -80,10 +80,7 @@ func _on_text_changed() -> void:
 	gutters_draw_line_numbers = line_count >= 3
 
 func _update_minimum_size() -> void:
-	if font == null or font_size <= 0:
-		custom_minimum_size = Vector2()
-
-	var height := font.get_height(font_size) * _height_in_lines
+	var height := get_line_height() * _height_in_lines
 	if stylebox != null:
 		height += stylebox.content_margin_top + stylebox.content_margin_bottom
 	custom_minimum_size = get_minimum_size() + Vector2(0.0, height)

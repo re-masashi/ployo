@@ -48,6 +48,11 @@ layout_mode = 2
 theme_override_styles/normal = SubResource("StyleBoxEmpty_juhpt")
 theme_override_styles/focus = SubResource("StyleBoxEmpty_hef1m")
 text = "cmd2 6 + 7"
+caret_blink = true
+use_default_word_separators = false
+use_custom_word_separators = true
+custom_word_separators = "!\"#%&'()*+,-./:;<=>?@[\\]^`{|}~"
+highlight_all_occurrences = true
 delimiter_strings = Array[String](["\" \""])
 auto_brace_completion_enabled = true
 auto_brace_completion_highlight_matching = true
