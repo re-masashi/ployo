@@ -273,6 +273,9 @@ class Parser:
 	var i: int = 0
 	var in_error: bool = false
 
+	func _consume_all_breaks() -> void:
+		while peek() and peek().type == Token.Type.Break: consume()
+
 	func parse_primary() -> Expr:
 		var token := consume()
 		if check_in_error("expression expected"): return null
@@ -311,9 +314,11 @@ class Parser:
 				var e := ListExpr.new()
 				e.data.append(token)
 				while i < tokens.size() and peek().type != Token.Type.BracketClose:
+					_consume_all_breaks()
 					var expr := parse_expr()
 					if check_in_error(): return null
 					e.elements.append(expr)
+					_consume_all_breaks()
 				var closing := consume_ty(Token.Type.BracketClose)
 				if check_in_error("`]` expected"): return null
 				e.data.append(closing)
@@ -322,9 +327,11 @@ class Parser:
 				var e := VectorExpr.new()
 				e.data.append(token)
 				while i < tokens.size() and peek().type != Token.Type.ParenClose:
+					_consume_all_breaks()
 					var expr := parse_expr()
 					if check_in_error(): return null
 					e.elements.append(expr)
+					_consume_all_breaks()
 				var closing := consume_ty(Token.Type.ParenClose)
 				if check_in_error("`)` expected"): return null
 				e.data.append(closing)
@@ -334,6 +341,7 @@ class Parser:
 				var e := DictExpr.new()
 				e.data.append(token)
 				while peek() and peek().type != Token.Type.BraceClose:
+					_consume_all_breaks()
 					var key := parse_expr()
 					if key == null: return null
 					consume_ty(Token.Type.Colon)
@@ -341,6 +349,7 @@ class Parser:
 					var value := parse_expr()
 					if value == null: return null
 					e.elements[key] = value
+					_consume_all_breaks()
 				var closing := consume_ty(Token.Type.BraceClose)
 				if check_in_error("`}` expected"): return null
 				e.data.append(closing)
