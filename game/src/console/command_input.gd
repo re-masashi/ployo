@@ -39,20 +39,7 @@ func _ready() -> void:
 	text_changed.connect(_on_text_changed)
 	text_set.connect(_on_text_changed)
 
-	var number_color := Color(0.804, 0.663, 0.49)
-	var txt_color := Color(0.831, 0.831, 0.831)
-	var kw_color := Color(0.704, 0.488, 0.836, 1.0)
-	var str_color := Color(0.452, 0.767, 0.446, 1.0)
-
-	var hl := CodeHighlighter.new()
-	hl.number_color = number_color
-	hl.symbol_color = txt_color
-	hl.function_color = txt_color
-	hl.member_variable_color = txt_color
-	for kw in KEYWORDS:
-		hl.add_keyword_color(kw, kw_color)
-	hl.add_color_region('"', '"', str_color)
-	syntax_highlighter = hl
+	syntax_highlighter = ConsoleSyntaxHighlighter.new()
 
 func _notification(what: int) -> void:
 	if what == NOTIFICATION_THEME_CHANGED:

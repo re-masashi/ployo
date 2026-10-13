@@ -4,6 +4,11 @@
 [ext_resource type="Script" uid="uid://dbkslocdpdqcd" path="res://src/console/terminal.gd" id="2_wyc7o"]
 [ext_resource type="Script" uid="uid://dyu607pupn3c5" path="res://src/console/command_input.gd" id="3_juhpt"]
 
+[sub_resource type="GDScript" id="GDScript_juhpt"]
+
+[sub_resource type="RichTextEffect" id="RichTextEffect_hef1m"]
+script = SubResource("GDScript_juhpt")
+
 [sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_juhpt"]
 
 [sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_hef1m"]
@@ -34,6 +39,7 @@ size_flags_vertical = 3
 focus_mode = 2
 scroll_following = true
 autowrap_mode = 0
+custom_effects = [SubResource("RichTextEffect_hef1m")]
 selection_enabled = true
 script = ExtResource("2_wyc7o")
 metadata/_custom_type_script = "uid://dbkslocdpdqcd"
@@ -43,16 +49,28 @@ layout_mode = 2
 
 [node name="CommandInput" type="CodeEdit" parent="PanelContainer/VBoxContainer" unique_id=195492338]
 unique_name_in_owner = true
-custom_minimum_size = Vector2(0, 31)
+custom_minimum_size = Vector2(0, 258)
 layout_mode = 2
 theme_override_styles/normal = SubResource("StyleBoxEmpty_juhpt")
 theme_override_styles/focus = SubResource("StyleBoxEmpty_hef1m")
-text = "cmd2 6 + 7"
+text = "fun my_function $hi $i
+	p $a
+	p $hi
+	if $i != 0
+		my_function $hi $i - 1
+	end
+end
+
+var $a = \"hi\"
+p $a
+
+my_function \"hi\" 10"
 caret_blink = true
 use_default_word_separators = false
 use_custom_word_separators = true
 custom_word_separators = "!\"#%&'()*+,-./:;<=>?@[\\]^`{|}~"
 highlight_all_occurrences = true
+gutters_draw_line_numbers = true
 delimiter_strings = Array[String](["\" \""])
 auto_brace_completion_enabled = true
 auto_brace_completion_highlight_matching = true
@@ -63,5 +81,5 @@ auto_brace_completion_pairs = {
 "{": "}"
 }
 script = ExtResource("3_juhpt")
-height_in_lines = 1
+height_in_lines = 10
 metadata/_custom_type_script = "uid://dyu607pupn3c5"

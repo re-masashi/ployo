@@ -69,7 +69,14 @@ func tokenize(input: String) -> TokenizationResult:
 	while i < input.length():
 		var found_match := false
 		var line_i := i - line_start
-		if input[i] == " " or input[i] == "\t":
+		if input[i] == "#":
+			while i < input.length():
+				if input[i] == "\n" or input[i] == ";":
+					i -= 1
+					break
+				i += 1
+			found_match = true
+		elif input[i] == " " or input[i] == "\t":
 			found_match = true
 		elif input[i] == "\n" or input[i] == ";":
 			found_match = true
@@ -688,7 +695,7 @@ class VarExpr extends Expr:
 	func compute(e: Executor, env: Env) -> Variant:
 		if name in env.variables:
 			return env.variables[name].getter.call()
-		e.generate_ast_error(self, "unknown variable {name}")
+		e.generate_ast_error(self, "unknown variable ${name}")
 		return Executor.stop_immediately
 
 class VectorExpr extends Expr:

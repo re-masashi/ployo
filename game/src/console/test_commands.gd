@@ -20,3 +20,11 @@ func accepts_int(x: Array) -> void:
 
 func p(x) -> void:
 	print(x)
+
+static var x := 0
+
+func inc_x() -> void:
+	x += 1
+
+func get_x() -> int:
+	return x
