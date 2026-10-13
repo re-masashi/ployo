@@ -51,15 +51,19 @@ func highlight_line(line: String, extra_spans: Array[Dictionary] = []) -> String
 	return spans_to_bbcode(line, spans)
 
 func execute_command(command: String) -> void:
+	var start_time := Time.get_ticks_usec()
 	terminal.add_hr(100, 2, C_THEME.surface0, HORIZONTAL_ALIGNMENT_LEFT)
 	terminal.newline()
 	var result = _execute_command(command)
+	var end_time := Time.get_ticks_usec()
+	var delta := (end_time - start_time) * 1e-3
+	var time_message := "in %.2f ms" % delta
 	if ConsoleLanguage.Executor.stop(result):
 		terminal.add_hr(75, 2, C_THEME.red, HORIZONTAL_ALIGNMENT_LEFT, false)
-		print(" execution failed!")
+		print(" execution failed " + time_message)
 	else:
 		terminal.add_hr(75, 2, C_THEME.green, HORIZONTAL_ALIGNMENT_LEFT, false)
-		print(" execution succeeded")
+		print(" execution succeeded " + time_message)
 
 func _execute_command(command: String) -> Variant:
 	var longest_line: int = 11
@@ -67,31 +71,32 @@ func _execute_command(command: String) -> Variant:
 	terminal.push_fgcolor(Color(C_THEME.base, 0.5))
 	for line in lines:
 		longest_line = maxi(longest_line, line.length() + 2)
-	#print("[c2 c=yellow]╭─ running: " + "─".repeat(longest_line - 11) + "╮[/c2]")
 	print("[c2 c=yellow]running at %s:[/c2]" % Time.get_datetime_string_from_system())
-	#print(" [table=1][cell]")
 	for line in lines:
 		print(highlight_line(line))
-		#print("[c2 c=yellow]│[/c2] " + highlight_line(line) + " ".repeat(longest_line - line.length() - 1) + "[c2 c=yellow]│[/c2]")
-	#print("[/cell][/table]")
-	#print("[c2 c=yellow]╰" + "─".repeat(longest_line) + "╯[/c2]")
 	terminal.add_hr(50, 2, C_THEME.yellow, HORIZONTAL_ALIGNMENT_LEFT, false)
 	terminal.newline()
 	terminal.pop()
+	var start := Time.get_ticks_usec()
 	var tokens := ConsoleLanguage.new().tokenize(command)
+	print("tokenization took %.2f ms" % ((Time.get_ticks_usec() - start) * 1e-3))
 	if tokens.has_error:
 		_print_errors(command, tokens.errors)
 		return ConsoleLanguage.Executor.stop_immediately
 	var parser := ConsoleLanguage.Parser.new()
 	parser.tokens = tokens.tokens
+	start = Time.get_ticks_usec()
 	var file := parser.parse_file()
+	print("parsing took %.2f ms" % ((Time.get_ticks_usec() - start) * 1e-3))
 	if not parser.errors.is_empty():
 		_print_errors(command, parser.errors)
 		return ConsoleLanguage.Executor.stop_immediately
 	#print(file)
 	var exec := ConsoleLanguage.Executor.new()
 	var obj := preload("test_commands.gd").new()
+	start = Time.get_ticks_usec()
 	var result = exec.exec_file(ConsoleLanguage.get_environment_of(obj), file)
+	print("execution took %.2f ms" % ((Time.get_ticks_usec() - start) * 1e-3))
 	if not exec.errors.is_empty():
 		_print_errors(command, exec.errors)
 		return ConsoleLanguage.Executor.stop_immediately
@@ -130,6 +135,8 @@ func _print_error(cmd: String, error: Dictionary, is_first: bool, is_last: bool)
 			is_context = false
 			var start := err_range[1] if line_i == err_range[0] else 0
 			var end := err_range[3] if line_i == err_range[2] else line.length()
+			end = mini(line.length(), end)
+			start = mini(start, end - 1)
 			extra_spans.append({
 				start = start,
 				end = end,

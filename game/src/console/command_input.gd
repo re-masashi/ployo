@@ -34,12 +34,20 @@ var _height_in_lines: float = 0.0:
 var stylebox: StyleBox
 var font: Font
 var font_size: int
+var errors: Array[Dictionary]:
+	set(value):
+		errors = value
+		queue_redraw()
+var file: ConsoleLanguage.File
 
 func _ready() -> void:
 	text_changed.connect(_on_text_changed)
 	text_set.connect(_on_text_changed)
 
 	syntax_highlighter = ConsoleSyntaxHighlighter.new()
+
+	get_h_scroll_bar().value_changed.connect(queue_redraw.unbind(1))
+	get_v_scroll_bar().value_changed.connect(queue_redraw.unbind(1))
 
 func _notification(what: int) -> void:
 	if what == NOTIFICATION_THEME_CHANGED:
@@ -51,6 +59,23 @@ func _notification(what: int) -> void:
 			font_size = get_theme_default_font_size()
 		stylebox = get_theme_stylebox(&"normal", &"CommandInput")
 		_update_minimum_size()
+
+func _draw() -> void:
+		for error in errors:
+			var err_range: Vector4i = error[ConsoleLanguage.RANGE]
+			for line in range(err_range.x, err_range.z + 1):
+				var start := err_range.y if line == err_range.x else 0
+				var end := err_range.w if line == err_range.z else get_line(line).length()
+				_draw_underline(line, start, end)
+
+func _draw_underline(line: int, from_col: int, to_col: int) -> void:
+	var descent := font.get_underline_position(font_size) + font.get_ascent(font_size)
+	var line_string := get_line(line)
+	var left := Vector2(get_rect_at_line_column(line, mini(from_col + 1, line_string.length())).position) + Vector2(0, descent)
+	var right := get_rect_at_line_column(line, mini(to_col, line_string.length()))
+	var real_right_pos := right.position.x + right.size.x
+	var width := real_right_pos - left.x
+	draw_rect(Rect2(left, Vector2(width, 2.0)), Console.C_THEME.red)
 
 func _gui_input(event: InputEvent) -> void:
 	var ke := event as InputEventKey
@@ -65,6 +90,23 @@ func _on_text_changed() -> void:
 	var line_count := get_line_count()
 	height_in_lines = clampi(line_count, 1, 10)
 	gutters_draw_line_numbers = line_count >= 3
+
+	reparse()
+
+func reparse() -> void:
+	var command := text
+	file = null
+	errors = []
+	var tokens := ConsoleLanguage.new().tokenize(command)
+	if tokens.has_error:
+		errors = tokens.errors
+		return
+	var parser := ConsoleLanguage.Parser.new()
+	parser.tokens = tokens.tokens
+	file = parser.parse_file()
+	if not parser.errors.is_empty():
+		errors = parser.errors
+	return
 
 func _update_minimum_size() -> void:
 	var height := get_line_height() * _height_in_lines
