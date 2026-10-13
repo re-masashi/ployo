@@ -2,7 +2,6 @@
 
 func _init() -> void:
 	install_effect(CatEffect.new())
-
 	clip_contents = true
 
 func add_line(line: String) -> void:

@@ -19,46 +19,93 @@ func _init() -> void:
 func _ready() -> void:
 	command_input.command_submitted.connect(execute_command)
 
+func spans_to_bbcode(text: String, spans: Array[Dictionary]) -> String:
+	var sb: PackedStringArray
+	for i in text.length():
+		var spans_im_in: Array[Dictionary] = []
+		for span in spans:
+			if i >= span.start and i < span.end:
+				spans_im_in.append(span)
+		for span in spans_im_in:
+			sb.append(span.open)
+		sb.append(text[i])
+		var spans_im_in_backwards := spans_im_in
+		spans_im_in_backwards.reverse()
+		for span in spans_im_in_backwards:
+			sb.append(span.close)
+	return "".join(sb)
+
+func highlight_line(line: String, extra_spans: Array[Dictionary] = []) -> String:
+	var hl_tokens := ConsoleSyntaxHighlighter.get_line_syntax_highlighting_tokens(line)
+	var spans: Array[Dictionary]
+	for pos in hl_tokens:
+		if not spans.is_empty():
+			spans[-1].end = pos
+		spans.append({
+			start = pos,
+			end = line.length(),
+			open = "[c2 c=%s]" % hl_tokens[pos].color,
+			close = "[/c2]"
+		})
+	spans.append_array(extra_spans)
+	return spans_to_bbcode(line, spans)
+
 func execute_command(command: String) -> void:
-	for line in command.split("\n"):
-		var line_h: PackedStringArray
-		line_h.append("[c2 c=text]")
-		var last_token_pos: int = 0
-		var hl_tokens := ConsoleSyntaxHighlighter.get_line_syntax_highlighting_tokens(line)
-		for pos in hl_tokens:
-			line_h.append(line.substr(last_token_pos, pos - last_token_pos))
-			last_token_pos = pos
-			line_h.append("[/c2]")
-			line_h.append("[c2 c=%s]" % hl_tokens[pos].color)
-		line_h.append(line.substr(last_token_pos))
-		line_h.append("[/c2]")
-		print("[c2 c=green]>[/c2] " + "".join(line_h))
-	print()
+	terminal.add_hr(100, 2, C_THEME.surface0, HORIZONTAL_ALIGNMENT_LEFT)
+	terminal.newline()
+	var result = _execute_command(command)
+	if ConsoleLanguage.Executor.stop(result):
+		terminal.add_hr(75, 2, C_THEME.red, HORIZONTAL_ALIGNMENT_LEFT, false)
+		print(" execution failed!")
+	else:
+		terminal.add_hr(75, 2, C_THEME.green, HORIZONTAL_ALIGNMENT_LEFT, false)
+		print(" execution succeeded")
+
+func _execute_command(command: String) -> Variant:
+	var longest_line: int = 11
+	var lines := command.split("\n")
+	terminal.push_fgcolor(Color(C_THEME.base, 0.5))
+	for line in lines:
+		longest_line = maxi(longest_line, line.length() + 2)
+	#print("[c2 c=yellow]╭─ running: " + "─".repeat(longest_line - 11) + "╮[/c2]")
+	print("[c2 c=yellow]running at %s:[/c2]" % Time.get_datetime_string_from_system())
+	#print(" [table=1][cell]")
+	for line in lines:
+		print(highlight_line(line))
+		#print("[c2 c=yellow]│[/c2] " + highlight_line(line) + " ".repeat(longest_line - line.length() - 1) + "[c2 c=yellow]│[/c2]")
+	#print("[/cell][/table]")
+	#print("[c2 c=yellow]╰" + "─".repeat(longest_line) + "╯[/c2]")
+	terminal.add_hr(50, 2, C_THEME.yellow, HORIZONTAL_ALIGNMENT_LEFT, false)
+	terminal.newline()
+	terminal.pop()
 	var tokens := ConsoleLanguage.new().tokenize(command)
 	if tokens.has_error:
 		_print_errors(command, tokens.errors)
-		return
+		return ConsoleLanguage.Executor.stop_immediately
 	var parser := ConsoleLanguage.Parser.new()
 	parser.tokens = tokens.tokens
 	var file := parser.parse_file()
 	if not parser.errors.is_empty():
 		_print_errors(command, parser.errors)
-		return
+		return ConsoleLanguage.Executor.stop_immediately
 	#print(file)
 	var exec := ConsoleLanguage.Executor.new()
 	var obj := preload("test_commands.gd").new()
 	var result = exec.exec_file(ConsoleLanguage.get_environment_of(obj), file)
 	if not exec.errors.is_empty():
 		_print_errors(command, exec.errors)
-		return
+		return ConsoleLanguage.Executor.stop_immediately
 	if ConsoleLanguage.Executor.stop(result):
-		print("execution failed")
-		print()
-		return
-	print("Executed successfully!")
-	print()
+		#print("execution failed")
+		#print()
+		return ConsoleLanguage.Executor.stop_immediately
+	#print("Executed successfully!")
+	#print()
+	terminal.pop_all()
+	return result
 
 func _print_errors(cmd: String, errors: Array[Dictionary]) -> void:
+	print("[c2 c=red][b]error:[/b][/c2]")
 	for i in errors.size():
 		_print_error(cmd, errors[i], i == 0, i == errors.size() - 1)
 	print()
@@ -72,28 +119,38 @@ func _print_error(cmd: String, error: Dictionary, is_first: bool, is_last: bool)
 		line_number_width_p10 *= 10
 	var err_range: Vector4i = error[ConsoleLanguage.RANGE]
 	var message: String = error[ConsoleLanguage.MESSAGE]
-	var prefix := "error: "
-	var prefix_w := " ".repeat(prefix.length())
+	var prefix_w := " "
 	var line_number_w := " ".repeat(line_number_width)
-	for line_i in range(err_range[0], err_range[2] + 1):
+	for line_i in range(maxi(err_range[0] - 1, 0), mini(err_range[2] + 2, lines.size())):
 		var line := lines[line_i]
-		var start := line.substr(0, err_range[1]).replace("\t", "    ").length() if line_i == err_range[0] else 0
-		var end := line.substr(0, err_range[3]).replace("\t", "    ").length() if line_i == err_range[2] else line.length()
 		var is_really_first := is_first and line_i == err_range[0]
+		var extra_spans: Array[Dictionary]
+		var is_context: bool = true
+		if line_i >= err_range[0] and line_i <= err_range[2]:
+			is_context = false
+			var start := err_range[1] if line_i == err_range[0] else 0
+			var end := err_range[3] if line_i == err_range[2] else line.length()
+			extra_spans.append({
+				start = start,
+				end = end,
+				open = "[u color=%s]" % C_THEME.red.to_html(false),
+				close = "[/u]",
+			})
+		var hl_line := highlight_line(line, extra_spans)
+		var fg_color := "[fgcolor=%s][i]" % Color(C_THEME.base, 0.5).to_html(true) if is_context else ""
+		var fg_color_close := "[/i][/fgcolor]" if is_context else ""
 		if is_really_first:
-			print("[c2 c=red]%s%*d | [/c2]" % [prefix, line_number_width, line_i + 1] + line.replace("\t", "    "))
+			print(prefix_w + "%s[c2 c=overlay2]%0*d[/c2]%s [c2 c=red]│ [/c2]" % [fg_color, line_number_width, line_i + 1, fg_color_close] + fg_color + hl_line + fg_color_close)
 		else:
-			print(prefix_w + "[c2 c=red]%*d | [/c2]" % [line_number_width, line_i + 1] + line.replace("\t", "    "))
-		print(prefix_w + line_number_w + "[c2 c=red] | [/c2]" + " ".repeat(start) + "[c2 c=yellow]" + "^".repeat(end - start) + "[/c2]")
+			print(prefix_w + "%s[c2 c=overlay2]%0*d[/c2]%s [c2 c=red]│ [/c2]" % [fg_color, line_number_width, line_i + 1, fg_color_close] + fg_color + hl_line + fg_color_close)
 	if is_last:
-		print(prefix_w + line_number_w + "[c2 c=red] '- [/c2]" + message)
+		print(prefix_w + line_number_w + "[c2 c=red] ╰─ [/c2]" + message)
 	else:
-		print(prefix_w + line_number_w + "[c2 c=red] |- [/c2]" + message)
+		print(prefix_w + line_number_w + "[c2 c=red] ├─ [/c2]" + message)
 
 func make_theme(c: Catppuccin = C_THEME) -> Theme:
 	var t := Theme.new()
-	var base_panel := StyleBoxFlat.new()
-	base_panel.bg_color = c.base
+	var base_panel := new_flat(c.base, [0], [4])
 	t.set_color("search_result_color", "TextEdit", c.surface0)
 	t.set_color("search_border_color", "TextEdit", c.teal)
 	t.set_color("caret_color", "TextEdit", c.rosewater)
@@ -117,8 +174,12 @@ func make_theme(c: Catppuccin = C_THEME) -> Theme:
 
 	t.set_color("default_color", "RichTextLabel", c.text)
 	t.set_color("selection_color", "RichTextLabel", Color(c.overlay2, 0.25))
+	t.set_color("table_border", "RichTextLabel", c.yellow)
 
 	t.set_stylebox("panel", "PanelContainer", base_panel)
+
+	t.set_constant("separation", "Separator", 2)
+	t.set_stylebox("separator", "Separator", new_line(c.surface0))
 
 	return t
 
@@ -142,3 +203,103 @@ class RobertLogger extends Logger:
 	@warning_ignore("unused_parameter")
 	func _log_error(function: String, file: String, line: int, code: String, rationale: String, editor_notify: bool, error_type: int, script_backtraces: Array[ScriptBacktrace]) -> void:
 		pass
+
+static func new_flat(
+		bg_color: Color,
+		radii: PackedInt32Array = [0],
+		margins: PackedInt32Array = [-1, -1, -1, -1],
+		border_width: PackedInt32Array = [0],
+		border_color := Color.TRANSPARENT,
+		expand_margins: PackedInt32Array = [0]
+	) -> StyleBoxFlat:
+	var sb := StyleBoxFlat.new()
+	# Uses indices relative to the end so that a single-item array will result
+	# in all the radii being the same
+	sb.corner_radius_top_left = maxi(0, int(radii[-4 % radii.size()]))
+	sb.corner_radius_top_right = maxi(0, int(radii[-3 % radii.size()]))
+	sb.corner_radius_bottom_left = maxi(0, int(radii[-2 % radii.size()]))
+	sb.corner_radius_bottom_right = maxi(0, int(radii[-1 % radii.size()]))
+
+	sb.content_margin_left = maxi(-1, int(margins[-4 % margins.size()]))
+	sb.content_margin_top = maxi(-1, int(margins[-3 % margins.size()]))
+	sb.content_margin_right = maxi(-1, int(margins[-2 % margins.size()]))
+	sb.content_margin_bottom = maxi(-1, int(margins[-1 % margins.size()]))
+
+	sb.border_width_left = int(border_width[-4 % border_width.size()])
+	sb.border_width_top = int(border_width[-3 % border_width.size()])
+	sb.border_width_right = int(border_width[-2 % border_width.size()])
+	sb.border_width_bottom = int(border_width[-1 % border_width.size()])
+
+	sb.expand_margin_left = maxi(-1, int(expand_margins[-4 % expand_margins.size()]))
+	sb.expand_margin_top = maxi(-1, int(expand_margins[-3 % expand_margins.size()]))
+	sb.expand_margin_right = maxi(-1, int(expand_margins[-2 % expand_margins.size()]))
+	sb.expand_margin_bottom = maxi(-1, int(expand_margins[-1 % expand_margins.size()]))
+
+	sb.border_color = border_color
+
+	sb.bg_color = bg_color
+
+	sb.draw_center = true
+
+	return sb
+
+static func new_line(
+		color: Color,
+		margins: PackedInt32Array = [-1, -1, -1, -1],
+		thickness: int = 2,
+		grow: PackedInt32Array = [0],
+	) -> StyleBoxLine:
+	var sb := StyleBoxLine.new()
+
+	sb.content_margin_left = maxi(-1, int(margins[-4 % margins.size()]))
+	sb.content_margin_top = maxi(-1, int(margins[-3 % margins.size()]))
+	sb.content_margin_right = maxi(-1, int(margins[-2 % margins.size()]))
+	sb.content_margin_bottom = maxi(-1, int(margins[-1 % margins.size()]))
+
+	sb.grow_begin = maxi(0, int(grow[-2 % grow.size()]))
+	sb.grow_end = maxi(0, int(grow[-1 % grow.size()]))
+
+	sb.color = color
+	sb.thickness = thickness
+	return sb
+
+
+static func change_bg_color(sb: StyleBoxFlat, bg_color: Color) -> StyleBoxFlat:
+	sb.bg_color = bg_color
+	return sb
+
+
+static func change_corner_rad(sb: StyleBoxFlat, radii: PackedInt32Array = [0]) -> StyleBoxFlat:
+	sb.corner_radius_top_left = radii[0]
+	sb.corner_radius_top_right = radii[-3]
+	sb.corner_radius_bottom_left = radii[-2]
+	sb.corner_radius_bottom_right = radii[-1]
+	return sb
+
+
+static func change_content_margins(sb: StyleBox, margins: PackedInt32Array = [0]) -> StyleBox:
+	sb.content_margin_left = int(margins[-4 % margins.size()])
+	sb.content_margin_top = int(margins[-3 % margins.size()])
+	sb.content_margin_right = int(margins[-2 % margins.size()])
+	sb.content_margin_bottom = int(margins[-1 % margins.size()])
+	return sb
+
+
+static func shadowed(sb: StyleBoxFlat, color: Color, shadow_size: int, x_offset: float, y_offset: float) -> StyleBoxFlat:
+	sb.shadow_color = color
+	sb.shadow_size = shadow_size
+	sb.shadow_offset = Vector2(x_offset, y_offset)
+	return sb
+
+
+static func blended(sb: StyleBoxFlat, blend := true) -> StyleBoxFlat:
+	sb.border_blend = blend
+	return sb
+
+
+static func get_darkest(...colors: Array) -> Color:
+	var darkest := Color.WHITE
+	for color: Color in colors:
+		if color.get_luminance() < darkest.get_luminance():
+			darkest = color
+	return darkest

@@ -6,6 +6,7 @@
 [ext_resource type="FontFile" uid="uid://coco4b4wblb7m" path="res://assets/fonts/IosevkaWeb-Italic.ttf" id="3_52mx2"]
 
 [resource]
+default_font_size = 14
 RichTextLabel/fonts/bold_font = ExtResource("1_58jnp")
 RichTextLabel/fonts/bold_italics_font = ExtResource("2_466ly")
 RichTextLabel/fonts/italics_font = ExtResource("3_52mx2")

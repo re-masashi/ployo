@@ -33,10 +33,11 @@ theme_override_constants/separation = 0
 
 [node name="Terminal" type="RichTextLabel" parent="PanelContainer/VBoxContainer" unique_id=1894835740]
 unique_name_in_owner = true
-clip_contents = false
 layout_mode = 2
 size_flags_vertical = 3
 focus_mode = 2
+theme_override_constants/text_highlight_h_padding = 0
+theme_override_constants/text_highlight_v_padding = 0
 scroll_following = true
 autowrap_mode = 0
 custom_effects = [SubResource("RichTextEffect_hef1m")]
@@ -49,7 +50,7 @@ layout_mode = 2
 
 [node name="CommandInput" type="CodeEdit" parent="PanelContainer/VBoxContainer" unique_id=195492338]
 unique_name_in_owner = true
-custom_minimum_size = Vector2(0, 258)
+custom_minimum_size = Vector2(0, 228)
 layout_mode = 2
 theme_override_styles/normal = SubResource("StyleBoxEmpty_juhpt")
 theme_override_styles/focus = SubResource("StyleBoxEmpty_hef1m")
