@@ -330,6 +330,21 @@ class Parser:
 				e.data.append(closing)
 				if e.elements.size() == 1: return e.elements[0]
 				return e
+			Token.Type.BraceOpen:
+				var e := DictExpr.new()
+				e.data.append(token)
+				while peek() and peek().type != Token.Type.BraceClose:
+					var key := parse_expr()
+					if key == null: return null
+					consume_ty(Token.Type.Colon)
+					if check_in_error("`:` expected"): return null
+					var value := parse_expr()
+					if value == null: return null
+					e.elements[key] = value
+				var closing := consume_ty(Token.Type.BraceClose)
+				if check_in_error("`}` expected"): return null
+				e.data.append(closing)
+				return e
 			_:
 				in_error = true
 				generate_token_error(token, "expression expected")
@@ -800,6 +815,25 @@ class ListExpr extends Expr:
 
 	func compute(e: Executor, env: Env) -> Variant:
 		return compute_list(e, env, elements)
+
+class DictExpr extends Expr:
+	var elements: Dictionary[Expr, Expr]
+
+	func _to_string() -> String:
+		var values: PackedStringArray
+		for element in elements:
+			values.append("%s: %s" % [element, elements[element]])
+		return "{%s}" % " ".join(values)
+
+	func compute(e: Executor, env: Env) -> Variant:
+		var result: Dictionary
+		for element in elements:
+			var key = element.compute(e, env)
+			if Executor.stop(key): return Executor.stop_immediately
+			var value = elements[element].compute(e, env)
+			if Executor.stop(value): return Executor.stop_immediately
+			result[key] = value
+		return result
 
 class PrefixExpr extends Expr:
 	const COMPATIBLE_TYPES: PackedInt32Array = [
