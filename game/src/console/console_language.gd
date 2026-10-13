@@ -22,6 +22,7 @@ const _LITERAL_TOKENS: Dictionary[String, Token.Type] = {
 	"}": Token.Type.BraceClose,
 	"==": Token.Type.Eq,
 	"=": Token.Type.Assign,
+	":": Token.Type.Colon,
 
 	">>": Token.Type.Shr,
 	"<<": Token.Type.Shl,
@@ -210,6 +211,7 @@ class Token:
 		BraceOpen,
 		BraceClose,
 		Assign,
+		Colon,
 
 		Add,
 		Sub,
@@ -504,6 +506,34 @@ class Parser:
 				consume_ty(Token.Type.KwEnd)
 				if check_in_error("`end` expected"): return null
 				return fun
+			Token.Type.KwFor:
+				consume()
+				var loop_name := consume_ty(Token.Type.VarRef)
+				if check_in_error("variable name expected"): return null
+				consume_ty(Token.Type.Colon)
+				if check_in_error("`:` expected"): return null
+				var loop := ForLoopStatement.new()
+				loop.data.append(tk)
+				loop.name = loop_name.content
+				loop.iterator = parse_expr()
+				if loop.iterator == null: return null
+				consume_ty(Token.Type.Break)
+				if check_in_error("line break expected"): return null
+				var body := CompoundStatement.new()
+				loop.body = body
+				while true:
+					var next := peek()
+					if next == null: break
+					if next.type == Token.Type.KwEnd:
+						break
+					var stmt := parse_statement()
+					consume_ty(Token.Type.Break)
+					if check_in_error("line break expected"): return null
+					if stmt == null: return null
+					body.statements.append(stmt)
+				consume_ty(Token.Type.KwEnd)
+				if check_in_error("`end` expected"): return null
+				return loop
 
 		var cmd := parse_expr()
 		if cmd == null: return null
@@ -920,8 +950,12 @@ class InfixExpr extends Expr:
 		var list = compute_list(e, env, [left, right])
 		if Executor.stop(list): return Executor.stop_immediately
 
-		var result = expr.execute(list)
+		var result = expr.execute(list, null, false)
 		if expr.has_execute_failed():
+			if op == Op.Eq:
+				return false
+			if op == Op.Neq:
+				return true
 			e.generate_ast_error(self, expr.get_error_text())
 			return Executor.stop_immediately
 		return result
@@ -1073,6 +1107,9 @@ class VarAssignmentStatement extends Statement:
 		var value_value = value.compute(e, env)
 		if Executor.stop(value_value): return Executor.stop_immediately
 		var info := env.variables[name]
+		if info.setter.is_null():
+			e.generate_ast_error(self, "cannot assign to a read-only variable")
+			return Executor.stop_immediately
 		info.setter.call(value_value)
 		return null
 
@@ -1096,6 +1133,37 @@ class ReturnStatement extends Statement:
 			return "return"
 		else:
 			return "return " + str(value)
+
+class ForLoopStatement extends Statement:
+	var name: String
+	var iterator: Expr
+	var body: Statement
+
+	func compute(e: Executor, env: Env) -> Variant:
+		var value = iterator.compute(e, env)
+		if Executor.stop(value): return Executor.stop_immediately
+		if value is not Array and value is not Dictionary and value is not int:
+			e.generate_ast_error(iterator, "cannot be iterated upon")
+		var current_value: Array = [null]
+		var loop_var := VarInfo.new()
+		loop_var.name = name
+		loop_var.getter = func(): return current_value[0]
+		var loop_env := env.duplicate()
+		loop_env.add_variable(loop_var)
+
+		for i in value:
+			current_value[0] = i
+			var result = body.compute(e, loop_env)
+			if Executor.stop(result): return Executor.stop_immediately
+			if result is _StatementResult:
+				if result.type == _StatementResult.Type.Return:
+					return result
+				elif result.type == _StatementResult.Type.Break:
+					break
+				elif result.type == _StatementResult.Type.Continue:
+					pass
+
+		return null
 
 class BreakStatement extends Statement:
 	@warning_ignore("unused_parameter")
