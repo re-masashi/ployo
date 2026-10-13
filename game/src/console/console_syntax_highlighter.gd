@@ -24,7 +24,7 @@ static func get_line_syntax_highlighting_tokens(line_text: String) -> Dictionary
 				continue
 			TYPE.VarRef:
 				color = &"blue"
-			TYPE.BracketOpen, TYPE.BracketClose, TYPE.ParenOpen, TYPE.ParenClose, TYPE.BraceOpen, TYPE.BraceClose:
+			TYPE.BracketOpen, TYPE.BracketClose, TYPE.ParenOpen, TYPE.ParenClose, TYPE.BraceOpen, TYPE.BraceClose, TYPE.Dot:
 				color = &"overlay2"
 			TYPE.Colon, TYPE.Add, TYPE.Sub, TYPE.Mul, TYPE.Div, TYPE.Gt, TYPE.Lt, TYPE.BitAnd, TYPE.BitOr, TYPE.BitXor, TYPE.Shr, TYPE.Shl, TYPE.Pow, TYPE.Gte, TYPE.Lte, TYPE.Eq, TYPE.Neq, TYPE.And, TYPE.Or, TYPE.Not, TYPE.Assign:
 				color = &"teal"

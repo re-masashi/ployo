@@ -4,7 +4,7 @@ const RANGE := &"range"
 const MESSAGE := &"message"
 
 static var _matchers: Dictionary[RegEx, Token.Type] = {
-	RegEx.create_from_string('''^([a-zA-Z_]+[a-zA-Z_0-9\\/-]*)'''):
+	RegEx.create_from_string('''^([a-zA-Z_]+[a-zA-Z_0-9]*)'''):
 		Token.Type.Word,
 	RegEx.create_from_string('''^"([^"\\\\]*(?:\\.[^"\\\\]*)*)"'''):
 		Token.Type.Str,
@@ -23,6 +23,7 @@ const _LITERAL_TOKENS: Dictionary[String, Token.Type] = {
 	"==": Token.Type.Eq,
 	"=": Token.Type.Assign,
 	":": Token.Type.Colon,
+	".": Token.Type.Dot,
 
 	">>": Token.Type.Shr,
 	"<<": Token.Type.Shl,
@@ -213,6 +214,8 @@ class Token:
 		Assign,
 		Colon,
 
+		Dot,
+
 		Add,
 		Sub,
 		Mul,
@@ -332,6 +335,35 @@ class Parser:
 				generate_token_error(token, "expression expected")
 		return null
 
+	func parse_postfix() -> Expr:
+		var left := parse_primary()
+		if left == null: return null
+		var token := peek()
+		if token != null:
+			match token.type:
+				Token.Type.Dot:
+					while true:
+						consume()
+						var next := parse_primary()
+						if next == null: return null
+						if next is CommandExpr:
+							var next_ce := next as CommandExpr
+							var expr := MethodExpr.new()
+							expr.data.append_array(next_ce.data)
+							expr.target = left
+							expr.command = next_ce.command
+							expr.args = next_ce.args
+							left = expr
+						else:
+							var expr := FieldAccessExpr.new()
+							expr.data.append(token)
+							expr.target = left
+							expr.field = next
+							left = expr
+						if not peek() or peek().type != Token.Type.Dot:
+							return left
+		return left
+
 	func parse_prefix() -> Expr:
 		var token := peek()
 		if token != null:
@@ -341,10 +373,10 @@ class Parser:
 					var e := PrefixExpr.new()
 					e.data.append(token)
 					e.op = PrefixExpr.get_op(token.type)
-					e.expr = parse_primary()
+					e.expr = parse_postfix()
 					if e.expr == null: return null
 					return e
-		return parse_primary()
+		return parse_postfix()
 
 	func parse_infix(min_prec := INT64_MIN) -> Expr:
 		var left := parse_prefix()
@@ -369,21 +401,6 @@ class Parser:
 
 	func parse_expr() -> Expr:
 		return parse_infix()
-
-	func parse_command() -> CommandExpr:
-		var invocation := CommandExpr.new()
-		var next_tk := consume_ty(Token.Type.Word)
-		if check_in_error("command expected"): return null
-
-		invocation.data = [next_tk]
-		invocation.command = next_tk.content
-
-		while peek() and peek().type != Token.Type.Break:
-			var expr := parse_expr()
-			if check_in_error(): return null
-			invocation.args.append(expr)
-
-		return invocation
 
 	func parse_statement() -> Statement:
 		var tk := peek()
@@ -746,6 +763,7 @@ class VectorExpr extends Expr:
 		for arg in elements:
 			var arg_v = arg.compute(e, env)
 			if Executor.stop(arg_v): return Executor.stop_immediately
+			args.append(arg_v)
 			if arg_v is int:
 				continue
 			elif arg_v is float:
@@ -1016,6 +1034,56 @@ class CommandExpr extends Expr:
 				position = m.get_string(1).to_int()
 				from_type = m.get_string(2)
 				to_type = m.get_string(3)
+
+class FieldAccessExpr extends Expr:
+	var target: Expr
+	var field: Expr
+
+	func compute(e: Executor, env: Env) -> Variant:
+		var target_val = target.compute(e, env)
+		if Executor.stop(target_val): return Executor.stop_immediately
+		var field_val = field.compute(e, env)
+		if Executor.stop(field_val): return Executor.stop_immediately
+
+		var expr := Expression.new()
+		expr.parse("a[b]", ["a", "b"])
+		var result = expr.execute([target_val, field_val], null, false)
+		if expr.has_execute_failed():
+			e.generate_ast_error(field, expr.get_error_text())
+			return Executor.stop_immediately
+		return result
+
+class MethodExpr extends Expr:
+	var target: Expr
+	var command: String
+	var args: Array[Expr]
+
+	func compute(e: Executor, env: Env) -> Variant:
+		var target_result = target.compute(e, env)
+		if Executor.stop(target_result): return Executor.stop_immediately
+
+		var arg_values_result = compute_list(e, env, args)
+		if Executor.stop(arg_values_result): return Executor.stop_immediately
+		var arg_values: Array = arg_values_result
+
+		var obtainer := Expression.new()
+		obtainer.parse("a.%s" % command, ["a"])
+		var callable = obtainer.execute([target_result], null, false)
+		if obtainer.has_execute_failed():
+			e.generate_ast_error(self, obtainer.get_error_text())
+			return Executor.stop_immediately
+		if callable is not Callable:
+			e.generate_ast_error(self, "cannot convert `%s` to Callable" % type_string(typeof(callable)))
+			return Executor.stop_immediately
+
+		var logger := CommandExpr._ErrorCapturingLogger.new()
+		OS.add_logger(logger)
+		var result = callable.callv(arg_values)
+		OS.remove_logger(logger)
+		if logger.captured_error:
+			e.generate_ast_error(args[logger.position - 1], "cannot convert from %s to %s" % [logger.from_type, logger.to_type])
+			return Executor.stop_immediately
+		return result
 
 @abstract class Statement extends ASTNode:
 	pass

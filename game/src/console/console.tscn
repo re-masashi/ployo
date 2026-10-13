@@ -50,22 +50,13 @@ layout_mode = 2
 
 [node name="CommandInput" type="CodeEdit" parent="PanelContainer/VBoxContainer" unique_id=195492338]
 unique_name_in_owner = true
-custom_minimum_size = Vector2(0, 228)
+custom_minimum_size = Vector2(0, 73.999504)
 layout_mode = 2
 theme_override_styles/normal = SubResource("StyleBoxEmpty_juhpt")
 theme_override_styles/focus = SubResource("StyleBoxEmpty_hef1m")
-text = "fun my_function $hi $i
-	p $a
-	p $hi
-	if $i != 0
-		my_function $hi $i - 1
-	end
-end
-
-var $a = \"hi\"
-p $a
-
-my_function \"hi\" 10"
+text = "var $x = [1 2 3]
+p $x
+p ($x.length)"
 caret_blink = true
 use_default_word_separators = false
 use_custom_word_separators = true
@@ -82,5 +73,5 @@ auto_brace_completion_pairs = {
 "{": "}"
 }
 script = ExtResource("3_juhpt")
-height_in_lines = 10
+height_in_lines = 3
 metadata/_custom_type_script = "uid://dyu607pupn3c5"
