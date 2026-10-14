@@ -180,9 +180,13 @@ static func get_environment_of(obj: Object, base_class: StringName = obj.get_cla
 	for variable in obj.get_property_list():
 		if variable.name in core_base_vars:
 			continue
+		if not variable.usage & PROPERTY_USAGE_SCRIPT_VARIABLE:
+			continue
 		var info := VarInfo.new()
 		info.name = variable.name
 		info.type = _get_type(variable)
+		info.getter = obj.get.bind(info.name)
+		info.setter = func(v): obj.set(info.name, v)
 
 		env.add_variable(info)
 
@@ -830,7 +834,11 @@ class VarExpr extends Expr:
 
 	func compute(e: Executor, env: Env) -> Variant:
 		if name in env.variables:
-			return env.variables[name].getter.call()
+			var v := env.variables[name]
+			if v.getter.is_null():
+				e.generate_ast_error(self, "cannot get this variable")
+				return Executor.stop_immediately
+			return v.getter.call()
 		e.generate_ast_error(self, "unknown variable ${name}")
 		return Executor.stop_immediately
 

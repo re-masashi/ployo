@@ -1,5 +1,7 @@
 @warning_ignore_start("unused_parameter")
 
+var my_variable: int
+
 func cmd1() -> void:
 	print("cmd1")
 
