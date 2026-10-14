@@ -93,9 +93,8 @@ func _execute_command(command: String) -> Variant:
 		return ConsoleLanguage.Executor.stop_immediately
 	#print(file)
 	var exec := ConsoleLanguage.Executor.new()
-	var obj := preload("test_commands.gd").new()
 	start = Time.get_ticks_usec()
-	var result = exec.exec_file(ConsoleLanguage.get_environment_of(obj), file)
+	var result = exec.exec_file(ConsoleLanguage.get_environment_of(preload("test_commands.gd").new()), file)
 	print("execution took %.2f ms" % ((Time.get_ticks_usec() - start) * 1e-3))
 	if not exec.errors.is_empty():
 		_print_errors(command, exec.errors)

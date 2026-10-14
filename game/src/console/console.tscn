@@ -2,22 +2,74 @@
 
 [ext_resource type="Script" uid="uid://dys2f12vpk3jh" path="res://src/console/console.gd" id="1_rrraj"]
 [ext_resource type="Script" uid="uid://dbkslocdpdqcd" path="res://src/console/terminal.gd" id="2_wyc7o"]
+[ext_resource type="Script" uid="uid://buebuqvccybad" path="res://src/console/console_syntax_highlighter.gd" id="3_hef1m"]
 [ext_resource type="Script" uid="uid://dyu607pupn3c5" path="res://src/console/command_input.gd" id="3_juhpt"]
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_g4c7l"]
+content_margin_left = 4.0
+content_margin_top = 4.0
+content_margin_right = 4.0
+content_margin_bottom = 4.0
+bg_color = Color(0.11764706, 0.11764706, 0.18039216, 1)
+border_color = Color(1, 1, 1, 0)
+
+[sub_resource type="StyleBoxLine" id="StyleBoxLine_b1sjo"]
+color = Color(0.19215687, 0.19607843, 0.26666668, 1)
+grow_begin = 0.0
+grow_end = 0.0
+thickness = 2
+
+[sub_resource type="Theme" id="Theme_wwcyr"]
+PanelContainer/styles/panel = SubResource("StyleBoxFlat_g4c7l")
+RichTextLabel/colors/default_color = Color(0.8039216, 0.8392157, 0.95686275, 1)
+RichTextLabel/colors/selection_color = Color(0.5764706, 0.6, 0.69803923, 0.25)
+RichTextLabel/colors/table_border = Color(0.9764706, 0.8862745, 0.6862745, 1)
+Separator/constants/separation = 2
+Separator/styles/separator = SubResource("StyleBoxLine_b1sjo")
+TextEdit/colors/bookmark_color = Color(0.5372549, 0.7058824, 0.98039216, 1)
+TextEdit/colors/brace_mismatch_color = Color(0.9529412, 0.54509807, 0.65882355, 1)
+TextEdit/colors/breakpoint_color = Color(0.9529412, 0.54509807, 0.65882355, 1)
+TextEdit/colors/caret_background_color = Color(0.11764706, 0.11764706, 0.18039216, 1)
+TextEdit/colors/caret_color = Color(0.9607843, 0.8784314, 0.8627451, 1)
+TextEdit/colors/completion_background_color = Color(0.09411765, 0.09411765, 0.14509805, 1)
+TextEdit/colors/completion_existing_color = Color(0.27058825, 0.2784314, 0.3529412, 1)
+TextEdit/colors/completion_scroll_color = Color(0.19215687, 0.19607843, 0.26666668, 1)
+TextEdit/colors/completion_scroll_color_hover = Color(0.27058825, 0.2784314, 0.3529412, 1)
+TextEdit/colors/completion_selected_color = Color(0.19215687, 0.19607843, 0.26666668, 1)
+TextEdit/colors/current_line_color = Color(0.8039216, 0.8392157, 0.95686275, 0.1)
+TextEdit/colors/executing_line_color = Color(0.9764706, 0.8862745, 0.6862745, 1)
+TextEdit/colors/font_color = Color(0.8039216, 0.8392157, 0.95686275, 1)
+TextEdit/colors/font_placeholder_color = Color(0.5764706, 0.6, 0.69803923, 1)
+TextEdit/colors/font_readonly_color = Color(0.5764706, 0.6, 0.69803923, 1)
+TextEdit/colors/line_number_color = Color(0.49803922, 0.5176471, 0.6117647, 1)
+TextEdit/colors/search_border_color = Color(0.5803922, 0.8862745, 0.8352941, 1)
+TextEdit/colors/search_result_color = Color(0.19215687, 0.19607843, 0.26666668, 1)
+TextEdit/colors/selection_color = Color(0.5764706, 0.6, 0.69803923, 0.25)
+TextEdit/colors/word_highlighted_color = Color(0.5764706, 0.6, 0.69803923, 0.25)
 
 [sub_resource type="GDScript" id="GDScript_juhpt"]
 
 [sub_resource type="RichTextEffect" id="RichTextEffect_hef1m"]
 script = SubResource("GDScript_juhpt")
 
+[sub_resource type="GDScript" id="GDScript_topmy"]
+
+[sub_resource type="RichTextEffect" id="RichTextEffect_d0rfm"]
+script = SubResource("GDScript_topmy")
+
 [sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_juhpt"]
 
 [sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_hef1m"]
+
+[sub_resource type="SyntaxHighlighter" id="SyntaxHighlighter_3kpjo"]
+script = ExtResource("3_hef1m")
 
 [node name="Console" type="Window" unique_id=185442822]
 oversampling_override = 1.0
 title = "Debug Console"
 initial_position = 5
 size = Vector2i(800, 600)
+theme = SubResource("Theme_wwcyr")
 script = ExtResource("1_rrraj")
 
 [node name="PanelContainer" type="PanelContainer" parent="." unique_id=1797372128]
@@ -40,7 +92,7 @@ theme_override_constants/text_highlight_h_padding = 0
 theme_override_constants/text_highlight_v_padding = 0
 scroll_following = true
 autowrap_mode = 0
-custom_effects = [SubResource("RichTextEffect_hef1m")]
+custom_effects = [SubResource("RichTextEffect_hef1m"), SubResource("RichTextEffect_d0rfm")]
 selection_enabled = true
 script = ExtResource("2_wyc7o")
 metadata/_custom_type_script = "uid://dbkslocdpdqcd"
@@ -50,7 +102,7 @@ layout_mode = 2
 
 [node name="CommandInput" type="CodeEdit" parent="PanelContainer/VBoxContainer" unique_id=195492338]
 unique_name_in_owner = true
-custom_minimum_size = Vector2(0, 73.999504)
+custom_minimum_size = Vector2(0, 74)
 layout_mode = 2
 theme_override_styles/normal = SubResource("StyleBoxEmpty_juhpt")
 theme_override_styles/focus = SubResource("StyleBoxEmpty_hef1m")
@@ -61,9 +113,12 @@ caret_blink = true
 use_default_word_separators = false
 use_custom_word_separators = true
 custom_word_separators = "!\"#%&'()*+,-./:;<=>?@[\\]^`{|}~"
+syntax_highlighter = SubResource("SyntaxHighlighter_3kpjo")
 highlight_all_occurrences = true
 gutters_draw_line_numbers = true
 delimiter_strings = Array[String](["\" \""])
+code_completion_enabled = true
+code_completion_prefixes = Array[String](["$"])
 auto_brace_completion_enabled = true
 auto_brace_completion_highlight_matching = true
 auto_brace_completion_pairs = {

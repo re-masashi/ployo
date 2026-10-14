@@ -305,6 +305,11 @@ class Parser:
 				e.data.append(token)
 				e.num = token.content.to_float()
 				return e
+			Token.Type.KwTrue, Token.Type.KwFalse:
+				var e := BoolExpr.new()
+				e.data.append(token)
+				e.value = token.type == Token.Type.KwTrue
+				return e
 			Token.Type.VarRef:
 				var e := VarExpr.new()
 				e.data.append(token)
@@ -439,6 +444,7 @@ class Parser:
 				if_stmt.data.append(tk)
 				if_stmt.condition = parse_expr()
 				if if_stmt.condition == null: return null
+				if_stmt.scope_end = current_token_end()
 				consume_ty(Token.Type.Break)
 				if check_in_error("line break expected"): return null
 				var body := CompoundStatement.new()
@@ -450,7 +456,9 @@ class Parser:
 					if next.type == Token.Type.KwElseIf:
 						if if_stmt.else_body != null:
 							generate_token_error(next, "unexpected `else if`")
-						consume()
+						var kw := consume()
+						if_stmt.scope_end = current_token_start()
+						if_stmt.data.append(kw)
 						var next_if := IfStatement.new()
 						next_if.data.append(next)
 						next_if.condition = parse_expr()
@@ -462,7 +470,9 @@ class Parser:
 						body = CompoundStatement.new()
 						next_if.body = body
 					elif next.type == Token.Type.KwElse:
-						consume()
+						var kw := consume()
+						if_stmt.scope_end = current_token_start()
+						if_stmt.data.append(kw)
 						consume_ty(Token.Type.Break)
 						if check_in_error("line break expected"): return null
 						body = CompoundStatement.new()
@@ -475,7 +485,9 @@ class Parser:
 					if check_in_error("line break expected"): return null
 					if stmt == null: return null
 					body.statements.append(stmt)
-				consume_ty(Token.Type.KwEnd)
+				var end := consume_ty(Token.Type.KwEnd)
+				if_stmt.scope_end = current_token_start()
+				if_stmt.data.append(end)
 				if check_in_error("`end` expected"): return null
 				return toplevel_if
 			Token.Type.KwVar:
@@ -489,12 +501,13 @@ class Parser:
 				var_decl.name = name.content
 				var_decl.value = parse_expr()
 				if var_decl.value == null: return null
+				var_decl.scope_end = current_token_end()
 				return var_decl
 			Token.Type.VarRef:
 				var eq := peek(1)
 				if eq and eq.type == Token.Type.Assign:
-					consume()
-					consume()
+					consume() # VarRef
+					consume() # Assign
 					var var_assign := VarAssignmentStatement.new()
 					var_assign.data.append(tk)
 					var_assign.name = tk.content
@@ -530,6 +543,7 @@ class Parser:
 					var arg_name := consume_ty(Token.Type.VarRef)
 					if check_in_error("parameter name expected"): return null
 					fun.args.append(arg_name.content)
+				fun.scope_start = current_token_end()
 				consume_ty(Token.Type.Break)
 				if check_in_error("line break expected"): return null
 				var body := CompoundStatement.new()
@@ -544,8 +558,11 @@ class Parser:
 					if check_in_error("line break expected"): return null
 					if stmt == null: return null
 					body.statements.append(stmt)
-				consume_ty(Token.Type.KwEnd)
+				var end := consume_ty(Token.Type.KwEnd)
+				fun.data.append(end)
 				if check_in_error("`end` expected"): return null
+				fun.scope_end = current_token_start()
+				fun.stmt_end = current_token_end()
 				return fun
 			Token.Type.KwFor:
 				consume()
@@ -554,6 +571,7 @@ class Parser:
 				consume_ty(Token.Type.Colon)
 				if check_in_error("`:` expected"): return null
 				var loop := ForLoopStatement.new()
+				loop.scope_start = current_token_end()
 				loop.data.append(tk)
 				loop.name = loop_name.content
 				loop.iterator = parse_expr()
@@ -572,8 +590,10 @@ class Parser:
 					if check_in_error("line break expected"): return null
 					if stmt == null: return null
 					body.statements.append(stmt)
-				consume_ty(Token.Type.KwEnd)
+				var end := consume_ty(Token.Type.KwEnd)
+				loop.data.append(end)
 				if check_in_error("`end` expected"): return null
+				loop.scope_end = current_token_start()
 				return loop
 
 		var cmd := parse_expr()
@@ -637,6 +657,12 @@ class Parser:
 			MESSAGE: message.format(token),
 		})
 
+	func current_token_start() -> Vector2i:
+		return Vector2i(tokens[i - 1].loc.x, tokens[i - 1].loc.y)
+
+	func current_token_end() -> Vector2i:
+		return Vector2i(tokens[i - 1].loc.z, tokens[i - 1].loc.w)
+
 class Executor:
 	static var stop_immediately := RefCounted.new():
 		set(value):
@@ -654,60 +680,69 @@ class Executor:
 	var errors: Array[Dictionary]
 
 	func exec_file(env: Env, file: File) -> Variant:
-		for statement in file.statements:
-			var value = statement.compute(self, env)
-			if stop(value):
-				return stop_immediately
-			if value is _StatementResult:
-				if value.type == _StatementResult.Type.Return:
-						return value.value
-				else:
-					if value.type == _StatementResult.Type.Break:
-						generate_ast_error(value.data, "cannot use `break` outside of a loop")
-					else:
-						generate_ast_error(value.data, "cannot use `continue` outside of a loop")
-					return Executor.stop_immediately
-
-		return halted
+		return file.compute(self, env)
 
 	func generate_ast_error(node: ASTNode, message: String) -> void:
+		errors.append({
+			RANGE: get_loc_range(node.data),
+			MESSAGE: message.format(node),
+		})
+
+	static func get_loc_range(tokens: Array[Token]) -> Vector4i:
 		var range_min := Vector2i(INT32_MAX, INT32_MAX)
 		var range_max := Vector2i(0, 0)
-		for tok in node.data:
+		for tok in tokens:
 			var left := Vector2i(tok.loc.x, tok.loc.y)
 			if left < range_min:
 				range_min = left
 			var right := Vector2i(tok.loc.z, tok.loc.w)
 			if right > range_max:
 				range_max = right
-		errors.append({
-			RANGE: Vector4i(range_min.x, range_min.y, range_max.x, range_max.y),
-			MESSAGE: message.format(node),
-		})
+		return Vector4i(range_min.x, range_min.y, range_max.x, range_max.y)
 
 	static func stop(v) -> bool:
 		return v is RefCounted and v == stop_immediately
 
 class Env:
+	# This does assume that the outer scopes will not be modified before this goes out of scope.
+	# However, since scopes are strictly nested, I believe this will always hold.
+	var methods_copied: bool = false
+	var variables_copied: bool = false
+
 	var methods: Dictionary[StringName, MethodInfo]
 	var variables: Dictionary[StringName, VarInfo]
 
 	func add_method(method: MethodInfo) -> void:
+		if methods_copied:
+			methods = methods.duplicate()
+			methods_copied = false
 		methods[method.name] = method
 
 	func add_variable(variable: VarInfo) -> void:
+		if variables_copied:
+			variables = variables.duplicate()
+			variables_copied = false
 		variables[variable.name] = variable
 
 	func duplicate() -> Env:
 		var x := Env.new()
-		x.methods = methods.duplicate()
-		x.variables = variables.duplicate()
+		x.methods = methods
+		x.variables = variables
+		x.methods_copied = true
+		x.variables_copied = true
 		return x
+
+	func _to_string() -> String:
+		return "Env(\n  methods=%s\n  variables=%s\n)" % [", ".join(methods.keys()), ", ".join(variables.keys())]
 
 @abstract class ASTNode:
 	var data: Array[Token]
 
 	@abstract func compute(e: Executor, env: Env) -> Variant
+
+	@warning_ignore("unused_parameter")
+	func add_completion_env(caret_pos: Vector2i, env: Env) -> void:
+		pass
 
 	static func compute_list(e: Executor, env: Env, list: Array[Expr]) -> Variant:
 		var args: Array
@@ -716,6 +751,36 @@ class Env:
 			if Executor.stop(v): return Executor.stop_immediately
 			args.append(v)
 		return args
+
+	static func caret_in_range(caret_pos: Vector2i, loc_range: Vector4i) -> bool:
+		if caret_pos.x == loc_range.x:
+			return caret_pos.y >= loc_range.y
+		if caret_pos.x == loc_range.z:
+			return caret_pos.y < loc_range.w
+		return caret_pos.x > loc_range.x and caret_pos.x <= loc_range.z
+
+	static func caret_in_range_2(caret_pos: Vector2i, loc_range_start: Vector2i, loc_range_end: Vector2i) -> bool:
+		return loc_gte(caret_pos, loc_range_start) and loc_lt(caret_pos, loc_range_end)
+
+	static func loc_gt(a: Vector2i, b: Vector2i) -> bool:
+		if a.x == b.x:
+			return a.y > b.y
+		return a.x > b.x
+
+	static func loc_gte(a: Vector2i, b: Vector2i) -> bool:
+		if a.x == b.x:
+			return a.y >= b.y
+		return a.x >= b.x
+
+	static func loc_lt(a: Vector2i, b: Vector2i) -> bool:
+		if a.x == b.x:
+			return a.y < b.y
+		return a.x < b.x
+
+	static func loc_lte(a: Vector2i, b: Vector2i) -> bool:
+		if a.x == b.x:
+			return a.y <= b.y
+		return a.x <= b.x
 
 @abstract class Expr extends ASTNode:
 	var type: TypeInfo
@@ -815,6 +880,7 @@ class VectorExpr extends Expr:
 			_:
 				assert(false)
 				return Executor.stop_immediately
+
 
 class ListExpr extends Expr:
 	var elements: Array[Expr]
@@ -1144,6 +1210,10 @@ class CompoundStatement extends Statement:
 				return value
 		return null
 
+	func add_completion_env(caret_pos: Vector2i, env: Env) -> void:
+		for statement in statements:
+			statement.add_completion_env(caret_pos, env)
+
 	func _to_string() -> String:
 		return "\n".join(statements)
 
@@ -1162,6 +1232,9 @@ class IfStatement extends Statement:
 	var body: Statement
 	var else_body: Statement
 
+	var scope_start: Vector2i
+	var scope_end: Vector2i
+
 	func compute(e: Executor, env: Env) -> Variant:
 		var cond = condition.compute(e, env) if condition != null else true
 		if Executor.stop(cond): return Executor.stop_immediately
@@ -1175,6 +1248,12 @@ class IfStatement extends Statement:
 				return value
 		return null
 
+	func add_completion_env(caret_pos: Vector2i, env: Env) -> void:
+		if caret_in_range_2(caret_pos, scope_start, scope_end):
+			body.add_completion_env(caret_pos, env)
+		else:
+			else_body.add_completion_env(caret_pos, env)
+
 	func _to_string() -> String:
 		return "if %s\n  %s\nelse\n  %s\nend" % [
 			condition,
@@ -1186,6 +1265,8 @@ class VarDeclStatement extends Statement:
 	var name: String
 	var value: Expr
 
+	var scope_end: Vector2i
+
 	func compute(e: Executor, env: Env) -> Variant:
 		var value_value = value.compute(e, env)
 		if Executor.stop(value_value): return Executor.stop_immediately
@@ -1194,7 +1275,7 @@ class VarDeclStatement extends Statement:
 		info.name = name
 		info.type = null
 		_make_storage_for(value_value, info)
-		env.variables[name] = info
+		env.add_variable(info)
 		return null
 
 	static func _make_storage_for(initial_value, info: VarInfo) -> void:
@@ -1203,6 +1284,12 @@ class VarDeclStatement extends Statement:
 			data_holder[0] = new_value
 		info.getter = func():
 			return data_holder[0]
+
+	func add_completion_env(caret_pos: Vector2i, env: Env) -> void:
+		if loc_gte(caret_pos, scope_end):
+			var info := VarInfo.new()
+			info.name = name
+			env.add_variable(info)
 
 	func _to_string() -> String:
 		return "var ${name} = {value}".format(self)
@@ -1250,6 +1337,9 @@ class ForLoopStatement extends Statement:
 	var iterator: Expr
 	var body: Statement
 
+	var scope_start: Vector2i
+	var scope_end: Vector2i
+
 	func compute(e: Executor, env: Env) -> Variant:
 		var value = iterator.compute(e, env)
 		if Executor.stop(value): return Executor.stop_immediately
@@ -1276,6 +1366,13 @@ class ForLoopStatement extends Statement:
 
 		return null
 
+	func add_completion_env(caret_pos: Vector2i, env: Env) -> void:
+		if caret_in_range_2(caret_pos, scope_start, scope_end):
+			var info := VarInfo.new()
+			info.name = name
+			env.add_variable(info)
+			body.add_completion_env(caret_pos, env)
+
 class BreakStatement extends Statement:
 	@warning_ignore("unused_parameter")
 	func compute(e: Executor, env: Env) -> Variant:
@@ -1296,6 +1393,10 @@ class FunStatement extends Statement:
 	var name: String
 	var args: PackedStringArray
 	var body: Statement
+
+	var scope_start: Vector2i
+	var scope_end: Vector2i
+	var stmt_end: Vector2i
 
 	func compute(e: Executor, env: Env) -> Variant:
 		var method_info := MethodInfo.new()
@@ -1330,14 +1431,43 @@ class FunStatement extends Statement:
 			return value
 		return null
 
+	func add_completion_env(caret_pos: Vector2i, env: Env) -> void:
+		if caret_in_range_2(caret_pos, scope_start, scope_end):
+			for arg in args:
+				var info := VarInfo.new()
+				info.name = arg
+				env.add_variable(info)
+			body.add_completion_env(caret_pos, env)
+		if loc_gt(caret_pos, scope_start):
+			var method_info := MethodInfo.new()
+			method_info.name = name
+			env.add_method(method_info)
+			var arguments: Array[ArgumentInfo]
+			for arg in args:
+				var info := ArgumentInfo.new()
+				info.name = arg
+				arguments.append(info)
+			method_info.arguments = arguments
+
 	func _to_string() -> String:
 		return "fun %s %s\n  %s\nend" % [name, " ".join(args), str(body).replace("\n", "\n  ")]
 
-class File:
-	var statements: Array[Statement]
-
-	func _to_string() -> String:
-		return "\n".join(statements)
+class File extends CompoundStatement:
+	func compute(e: Executor, env: Env) -> Variant:
+		for statement in statements:
+			var value = statement.compute(e, env)
+			if Executor.stop(value):
+				return Executor.stop_immediately
+			if value is _StatementResult:
+				if value.type == _StatementResult.Type.Return:
+						return value.value
+				else:
+					if value.type == _StatementResult.Type.Break:
+						e.generate_ast_error(value.data, "cannot use `break` outside of a loop")
+					else:
+						e.generate_ast_error(value.data, "cannot use `continue` outside of a loop")
+					return Executor.stop_immediately
+		return Executor.halted
 
 class TokenizationResult:
 	var tokens: Array[Token]

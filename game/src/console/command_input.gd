@@ -40,9 +40,35 @@ var errors: Array[Dictionary]:
 		queue_redraw()
 var file: ConsoleLanguage.File
 
+func is_deletable(ch: String) -> bool:
+	if ch == "$": return true
+	if ch == "_": return true
+	if ord(ch) >= ord("a") and ord(ch) <= ord("z"): return true
+	if ord(ch) >= ord("A") and ord(ch) <= ord("Z"): return true
+	return false
+
+func _confirm_code_completion(_replace: bool) -> void:
+	var option := get_code_completion_option(get_code_completion_selected_index())
+	for caret_index in get_caret_count():
+		var line_index := get_caret_line(caret_index)
+		var line_text := get_line(line_index)
+		var caret_column := clampi(get_caret_column(caret_index), 0, maxi(0, line_text.length() - 1))
+		var i := caret_column
+		while i >= 0:
+			if not is_deletable(line_text[i]):
+				break
+			backspace(caret_index)
+			i -= 1
+	insert_text_at_caret(option.insert_text + " ")
+	cancel_code_completion.call_deferred()
+
 func _ready() -> void:
+	code_completion_enabled = true
+	code_completion_prefixes = ["$"]
+
 	text_changed.connect(_on_text_changed)
 	text_set.connect(_on_text_changed)
+	#lines_edited_from.connect(_on_lines_edited_from, CONNECT_DEFERRED)
 
 	syntax_highlighter = ConsoleSyntaxHighlighter.new()
 
@@ -88,14 +114,39 @@ func _gui_input(event: InputEvent) -> void:
 
 func _on_text_changed() -> void:
 	var line_count := get_line_count()
-	height_in_lines = clampi(line_count, 1, 10)
+	height_in_lines = clampi(line_count, 2, 10)
 	gutters_draw_line_numbers = line_count >= 3
 
 	reparse()
+	var completions := ConsoleLanguage.get_environment_of(preload("test_commands.gd").new())
+	if file != null:
+		var caret_pos := Vector2i(get_caret_line(), get_caret_column())
+		file.add_completion_env(caret_pos, completions)
+	for caret_index in get_caret_count():
+		var line_index := get_caret_line(caret_index)
+		var line_text := get_line(line_index)
+		if line_text.substr(clampi(get_caret_column(caret_index), 0, maxi(0, line_text.length() - 1)), 1) == "$":
+			for variable_name in completions.variables:
+				add_code_completion_option(CodeEdit.KIND_VARIABLE, "$" + variable_name, "$" + variable_name)
+			for method_name in completions.methods:
+				add_code_completion_option(CodeEdit.KIND_FUNCTION, method_name, method_name)
+			update_code_completion_options(true)
+			return
+
+	for variable_name in completions.variables:
+		add_code_completion_option(CodeEdit.KIND_VARIABLE, "$" + variable_name, "$" + variable_name)
+	for method_name in completions.methods:
+		add_code_completion_option(CodeEdit.KIND_FUNCTION, method_name, method_name)
+	update_code_completion_options(false)
+	request_code_completion()
+
+#func _on_lines_edited_from(_from_line: int, _to_line: int) -> void:
+#	(func():
+#	).call_deferred()
 
 func reparse() -> void:
 	var command := text
-	file = null
+	#file = null
 	errors = []
 	var tokens := ConsoleLanguage.new().tokenize(command)
 	if tokens.has_error:
