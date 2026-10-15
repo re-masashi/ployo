@@ -36,13 +36,15 @@ func _try_secure(body: Node3D) -> void:
 	if multiplayer.has_multiplayer_peer() and not multiplayer.is_server():
 		return
 	_secure_local(item)
-	_remote_secure.rpc(item.get_path(), total_value)
+	_remote_secure.rpc(item.get_path(), total_value, item.global_position, item.global_rotation)
 
 
 func _secure_local(item: Grabbable) -> void:
+	item.snap_upright()
 	item.is_secured = true
-	item.set_multiplayer_authority(1)
+	item.set_net_authority(1)
 	item.freeze = true
+	item.sleeping = false
 	item.linear_velocity = Vector3.ZERO
 	item.angular_velocity = Vector3.ZERO
 	total_value += item.value
@@ -53,14 +55,22 @@ func _secure_local(item: Grabbable) -> void:
 
 
 @rpc("any_peer", "call_local")
-func _remote_secure(item_path: String, total: int) -> void:
+func _remote_secure(item_path: String, total: int, pos: Vector3, rot: Vector3) -> void:
 	total_value = total
 	_refresh_label()
 	var item := get_node_or_null(item_path) as Grabbable
-	if item == null or item.is_secured:
+	if item == null:
+		return
+	item.global_transform = Transform3D(Basis.from_euler(rot), pos)
+	if item.is_secured:
+		item.freeze = true
+		item.linear_velocity = Vector3.ZERO
+		item.angular_velocity = Vector3.ZERO
 		return
 	item.is_secured = true
+	item.set_net_authority(1)
 	item.freeze = true
+	item.sleeping = false
 	item.linear_velocity = Vector3.ZERO
 	item.angular_velocity = Vector3.ZERO
 

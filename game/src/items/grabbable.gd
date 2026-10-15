@@ -57,6 +57,18 @@ func _on_body_entered(_body: Node) -> void:
 	apply_impact(_prev_speed)
 
 
+func set_net_authority(peer_id: int) -> void:
+	set_multiplayer_authority(peer_id)
+	var sync := get_node_or_null("MultiplayerSynchronizer") as MultiplayerSynchronizer
+	if sync != null:
+		sync.set_multiplayer_authority(peer_id)
+
+
+func snap_upright() -> void:
+	var e := global_rotation
+	global_rotation = Vector3(0.0, e.y, 0.0)
+
+
 func can_grab() -> bool:
 	return not is_carried and not is_secured and not is_broken and _cooldown <= 0.0
 
@@ -82,6 +94,8 @@ func release(thrown: bool, impulse: Vector3) -> void:
 	freeze = false
 	sleeping = false
 	collision_layer = prev_collision_layer
+	linear_velocity = Vector3.ZERO
+	angular_velocity = Vector3.ZERO
 	if thrown:
 		_cooldown = REGRAB_COOLDOWN
 		apply_central_impulse(impulse)
@@ -124,6 +138,12 @@ func _remote_break() -> void:
 
 
 func reset_to_origin() -> void:
+	_apply_reset(origin_transform)
+	if multiplayer.has_multiplayer_peer() and multiplayer.is_server():
+		_remote_reset.rpc(origin_transform.origin, origin_transform.basis.get_euler())
+
+
+func _apply_reset(t: Transform3D) -> void:
 	is_carried = false
 	is_secured = false
 	is_broken = false
@@ -134,9 +154,16 @@ func reset_to_origin() -> void:
 	value = _original_value
 	freeze = false
 	sleeping = false
-	set_multiplayer_authority(1)
+	set_net_authority(1)
 	linear_velocity = Vector3.ZERO
 	angular_velocity = Vector3.ZERO
-	global_transform = origin_transform
+	global_transform = t
 	if _mesh != null:
 		_mesh.visible = true
+
+
+@rpc("any_peer", "call_local")
+func _remote_reset(pos: Vector3, rot: Vector3) -> void:
+	if multiplayer.is_server():
+		return
+	_apply_reset(Transform3D(Basis.from_euler(rot), pos))

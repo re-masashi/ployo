@@ -188,7 +188,10 @@ func place_carried() -> void:
 	if not spot[1]:
 		print("[Hands] no room to place ", item.name)
 		return
-	item.global_position = spot[0]
+	var yaw := _cam.global_rotation.y + carry_yaw
+	item.global_transform = Transform3D(Basis(Vector3.UP, yaw), spot[0])
+	item.linear_velocity = Vector3.ZERO
+	item.angular_velocity = Vector3.ZERO
 	_server_or_direct_release(item, false, Vector3.ZERO)
 
 
@@ -226,8 +229,10 @@ func _my_id() -> int:
 
 func _server_or_direct_grab(item: Grabbable) -> void:
 	if not multiplayer.has_multiplayer_peer() or multiplayer.is_server():
-		item.set_multiplayer_authority(_my_id())
+		item.set_net_authority(_my_id())
 		_attach(item)
+		if multiplayer.has_multiplayer_peer() and multiplayer.is_server():
+			_remote_grab.rpc(item.get_path(), _my_id())
 	else:
 		_grab_pending = true
 		_pending_t = 2.0
@@ -244,7 +249,7 @@ func server_request_grab(item_path: String) -> void:
 		_grab_denied.rpc_id(sender)
 		return
 	item.grab_by(sender)
-	item.set_multiplayer_authority(sender)
+	item.set_net_authority(sender)
 	_client_grab_granted.rpc_id(sender, item_path)
 	_remote_grab.rpc(item_path, sender)
 
@@ -257,6 +262,7 @@ func _remote_grab(item_path: String, sender: int) -> void:
 		return
 	if sender == _my_id():
 		return
+	item.set_net_authority(sender)
 	item.grab_by(sender)
 
 
@@ -277,40 +283,47 @@ func _grab_denied() -> void:
 
 
 func _server_or_direct_release(item: Grabbable, thrown: bool, impulse: Vector3) -> void:
+	var pos := item.global_position
+	var rot := item.global_rotation
 	if not multiplayer.has_multiplayer_peer() or multiplayer.is_server():
-		item.set_multiplayer_authority(1)
+		item.set_net_authority(1)
 		_release_local(item, thrown, impulse)
+		if multiplayer.has_multiplayer_peer() and multiplayer.is_server():
+			_remote_release.rpc(item.get_path(), thrown, impulse, pos, rot)
 	else:
 		_release_local(item, thrown, impulse)
-		server_release.rpc_id(1, item.get_path(), thrown, impulse)
+		server_release.rpc_id(1, item.get_path(), thrown, impulse, pos, rot)
 
 
 @rpc("any_peer")
-func server_release(item_path: String, thrown: bool, impulse: Vector3) -> void:
+func server_release(item_path: String, thrown: bool, impulse: Vector3, pos: Vector3, rot: Vector3) -> void:
 	if not multiplayer.is_server():
 		return
 	var item := get_node_or_null(item_path) as Grabbable
 	if item == null:
 		return
-	item.set_multiplayer_authority(1)
+	item.global_transform = Transform3D(Basis.from_euler(rot), pos)
+	item.set_net_authority(1)
 	if item.is_carried:
 		item.release(thrown, impulse)
-	_remote_release.rpc(item_path, thrown, impulse)
+	_remote_release.rpc(item_path, thrown, impulse, pos, rot)
 
 
 @rpc("any_peer", "call_local")
-func _remote_release(item_path: String, thrown: bool, impulse: Vector3) -> void:
+func _remote_release(item_path: String, thrown: bool, impulse: Vector3, pos: Vector3, rot: Vector3) -> void:
 	var item := get_node_or_null(item_path) as Grabbable
 	if item == null or not item.is_carried:
 		return
 	if item.carrier_id == _my_id():
 		return
+	item.global_transform = Transform3D(Basis.from_euler(rot), pos)
+	item.set_net_authority(1)
 	item.release(thrown, impulse)
 
 
 func _attach(item: Grabbable) -> void:
 	carried_item = item
-	item.set_multiplayer_authority(_my_id())
+	item.set_net_authority(_my_id())
 	item.grab_by(_my_id())
 	if not item.broken.is_connected(_on_carried_broken):
 		item.broken.connect(_on_carried_broken.bind(item))
@@ -325,7 +338,7 @@ func _attach(item: Grabbable) -> void:
 func _release_local(item: Grabbable, thrown: bool, impulse: Vector3) -> void:
 	if item.broken.is_connected(_on_carried_broken):
 		item.broken.disconnect(_on_carried_broken)
-	item.set_multiplayer_authority(1)
+	item.set_net_authority(1)
 	item.release(thrown, impulse)
 	if carried_item == item:
 		carried_item = null
