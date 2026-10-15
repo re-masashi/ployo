@@ -1,6 +1,7 @@
 @tool
 class_name Console extends Control
 
+const MAIN_THEME = preload("uid://5l28gssbq22k")
 const C_THEME := preload("res://src/console/catppuccins/mocha.tres")
 
 @onready var terminal: Terminal = %Terminal
@@ -167,7 +168,7 @@ func _print_error(cmd: String, error: Dictionary, is_first: bool, is_last: bool)
 		print(prefix_w + line_number_w + "[c2 c=red] ├─ [/c2]" + message)
 
 func make_theme(c: Catppuccin = C_THEME) -> Theme:
-	var t := Theme.new()
+	var t: Theme = MAIN_THEME.duplicate()
 	var base_panel := new_flat(c.base, [0], [4])
 	t.set_color("search_result_color", "TextEdit", c.surface0)
 	t.set_color("search_border_color", "TextEdit", c.teal)
