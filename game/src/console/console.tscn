@@ -5,7 +5,7 @@
 [ext_resource type="Script" uid="uid://buebuqvccybad" path="res://src/console/console_syntax_highlighter.gd" id="3_hef1m"]
 [ext_resource type="Script" uid="uid://dyu607pupn3c5" path="res://src/console/command_input.gd" id="3_juhpt"]
 
-[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_g4c7l"]
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_hef1m"]
 content_margin_left = 4.0
 content_margin_top = 4.0
 content_margin_right = 4.0
@@ -13,19 +13,19 @@ content_margin_bottom = 4.0
 bg_color = Color(0.11764706, 0.11764706, 0.18039216, 1)
 border_color = Color(1, 1, 1, 0)
 
-[sub_resource type="StyleBoxLine" id="StyleBoxLine_b1sjo"]
+[sub_resource type="StyleBoxLine" id="StyleBoxLine_g4c7l"]
 color = Color(0.19215687, 0.19607843, 0.26666668, 1)
 grow_begin = 0.0
 grow_end = 0.0
 thickness = 2
 
-[sub_resource type="Theme" id="Theme_wwcyr"]
-PanelContainer/styles/panel = SubResource("StyleBoxFlat_g4c7l")
+[sub_resource type="Theme" id="Theme_b1sjo"]
+PanelContainer/styles/panel = SubResource("StyleBoxFlat_hef1m")
 RichTextLabel/colors/default_color = Color(0.8039216, 0.8392157, 0.95686275, 1)
 RichTextLabel/colors/selection_color = Color(0.5764706, 0.6, 0.69803923, 0.25)
 RichTextLabel/colors/table_border = Color(0.9764706, 0.8862745, 0.6862745, 1)
 Separator/constants/separation = 2
-Separator/styles/separator = SubResource("StyleBoxLine_b1sjo")
+Separator/styles/separator = SubResource("StyleBoxLine_g4c7l")
 TextEdit/colors/bookmark_color = Color(0.5372549, 0.7058824, 0.98039216, 1)
 TextEdit/colors/brace_mismatch_color = Color(0.9529412, 0.54509807, 0.65882355, 1)
 TextEdit/colors/breakpoint_color = Color(0.9529412, 0.54509807, 0.65882355, 1)
@@ -57,22 +57,30 @@ script = SubResource("GDScript_juhpt")
 [sub_resource type="RichTextEffect" id="RichTextEffect_d0rfm"]
 script = SubResource("GDScript_topmy")
 
+[sub_resource type="GDScript" id="GDScript_wwcyr"]
+
+[sub_resource type="RichTextEffect" id="RichTextEffect_topmy"]
+script = SubResource("GDScript_wwcyr")
+
 [sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_juhpt"]
 
 [sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_hef1m"]
 
-[sub_resource type="SyntaxHighlighter" id="SyntaxHighlighter_3kpjo"]
+[sub_resource type="SyntaxHighlighter" id="SyntaxHighlighter_d0rfm"]
 script = ExtResource("3_hef1m")
 
-[node name="Console" type="Window" unique_id=185442822]
-oversampling_override = 1.0
-title = "Debug Console"
-initial_position = 5
-size = Vector2i(800, 600)
-theme = SubResource("Theme_wwcyr")
+[node name="Console" type="Control" unique_id=1789354983]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme = SubResource("Theme_b1sjo")
 script = ExtResource("1_rrraj")
 
 [node name="PanelContainer" type="PanelContainer" parent="." unique_id=1797372128]
+layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
@@ -92,7 +100,7 @@ theme_override_constants/text_highlight_h_padding = 0
 theme_override_constants/text_highlight_v_padding = 0
 scroll_following = true
 autowrap_mode = 0
-custom_effects = [SubResource("RichTextEffect_hef1m"), SubResource("RichTextEffect_d0rfm")]
+custom_effects = [SubResource("RichTextEffect_hef1m"), SubResource("RichTextEffect_d0rfm"), SubResource("RichTextEffect_topmy")]
 selection_enabled = true
 script = ExtResource("2_wyc7o")
 metadata/_custom_type_script = "uid://dbkslocdpdqcd"
@@ -102,18 +110,16 @@ layout_mode = 2
 
 [node name="CommandInput" type="CodeEdit" parent="PanelContainer/VBoxContainer" unique_id=195492338]
 unique_name_in_owner = true
-custom_minimum_size = Vector2(0, 74)
+custom_minimum_size = Vector2(0, 118)
 layout_mode = 2
 theme_override_styles/normal = SubResource("StyleBoxEmpty_juhpt")
 theme_override_styles/focus = SubResource("StyleBoxEmpty_hef1m")
-text = "var $x = [1 2 3]
-p $x
-p ($x.length)"
+placeholder_text = "console command..."
 caret_blink = true
 use_default_word_separators = false
 use_custom_word_separators = true
 custom_word_separators = "!\"#%&'()*+,-./:;<=>?@[\\]^`{|}~"
-syntax_highlighter = SubResource("SyntaxHighlighter_3kpjo")
+syntax_highlighter = SubResource("SyntaxHighlighter_d0rfm")
 highlight_all_occurrences = true
 gutters_draw_line_numbers = true
 delimiter_strings = Array[String](["\" \""])
@@ -128,5 +134,5 @@ auto_brace_completion_pairs = {
 "{": "}"
 }
 script = ExtResource("3_juhpt")
-height_in_lines = 3
+height_in_lines = 5
 metadata/_custom_type_script = "uid://dyu607pupn3c5"

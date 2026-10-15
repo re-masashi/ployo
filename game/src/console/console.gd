@@ -1,5 +1,5 @@
 @tool
-class_name Console extends Window
+class_name Console extends Control
 
 const C_THEME := preload("res://src/console/catppuccins/mocha.tres")
 
@@ -7,14 +7,26 @@ const C_THEME := preload("res://src/console/catppuccins/mocha.tres")
 @onready var command_input: CommandInput = %CommandInput
 
 var methods: Array[ConsoleLanguage.MethodInfo]
-
 var logger: RobertLogger
+
+var environment: ConsoleLanguage.Env:
+	set(value):
+		environment = value
+		if command_input == null:
+			ready.connect(func():
+				command_input.environment = environment,
+				CONNECT_ONE_SHOT
+			)
+		else:
+			command_input.environment = value
 
 func _init() -> void:
 	logger = RobertLogger.new()
 	logger.console = self
 
 	theme = make_theme()
+
+	environment = ConsoleLanguage.Env.default()
 
 func _ready() -> void:
 	command_input.command_submitted.connect(execute_command)
@@ -79,7 +91,7 @@ func _execute_command(command: String) -> Variant:
 	terminal.pop()
 	var start := Time.get_ticks_usec()
 	var tokens := ConsoleLanguage.new().tokenize(command)
-	print("tokenization took %.2f ms" % ((Time.get_ticks_usec() - start) * 1e-3))
+	#print("tokenization took %.2f ms" % ((Time.get_ticks_usec() - start) * 1e-3))
 	if tokens.has_error:
 		_print_errors(command, tokens.errors)
 		return ConsoleLanguage.Executor.stop_immediately
@@ -87,15 +99,15 @@ func _execute_command(command: String) -> Variant:
 	parser.tokens = tokens.tokens
 	start = Time.get_ticks_usec()
 	var file := parser.parse_file()
-	print("parsing took %.2f ms" % ((Time.get_ticks_usec() - start) * 1e-3))
+	#print("parsing took %.2f ms" % ((Time.get_ticks_usec() - start) * 1eRRRRERR-3))
 	if not parser.errors.is_empty():
 		_print_errors(command, parser.errors)
 		return ConsoleLanguage.Executor.stop_immediately
 	#print(file)
 	var exec := ConsoleLanguage.Executor.new()
 	start = Time.get_ticks_usec()
-	var result = exec.exec_file(ConsoleLanguage.get_environment_of(preload("test_commands.gd").new()), file)
-	print("execution took %.2f ms" % ((Time.get_ticks_usec() - start) * 1e-3))
+	var result = exec.exec_file(environment, file)
+	#print("execution took %.2f ms" % ((Time.get_ticks_usec() - start) * 1e-3))
 	if not exec.errors.is_empty():
 		_print_errors(command, exec.errors)
 		return ConsoleLanguage.Executor.stop_immediately
@@ -164,7 +176,7 @@ func make_theme(c: Catppuccin = C_THEME) -> Theme:
 	t.set_color("selection_color", "TextEdit", Color(c.overlay2, 0.25))
 	t.set_color("font_color", "TextEdit", c.text)
 	t.set_color("font_readonly_color", "TextEdit", c.overlay2)
-	t.set_color("font_placeholder_color", "TextEdit", c.overlay2)
+	t.set_color("font_placeholder_color", "TextEdit", c.surface0)
 	t.set_color("current_line_color", "TextEdit", Color(c.text, 0.1))
 	t.set_color("word_highlighted_color", "TextEdit", Color(c.overlay2, 0.25))
 	t.set_color("breakpoint_color", "TextEdit", c.red)
@@ -177,6 +189,7 @@ func make_theme(c: Catppuccin = C_THEME) -> Theme:
 	t.set_color("completion_selected_color", "TextEdit", c.surface0)
 	t.set_color("completion_existing_color", "TextEdit", c.surface1)
 	t.set_color("brace_mismatch_color", "TextEdit", c.red)
+	t.set_constant("caret_width", "TextEdit", 2)
 
 	t.set_color("default_color", "RichTextLabel", c.text)
 	t.set_color("selection_color", "RichTextLabel", Color(c.overlay2, 0.25))
@@ -200,6 +213,8 @@ class RobertLogger extends Logger:
 			OS.remove_logger(self)
 
 	func _log_message(message: String, error: bool) -> void:
+		if not console.terminal: return
+
 		if error:
 			console.terminal.push_color(Color.RED)
 		console.terminal.add_line(message)

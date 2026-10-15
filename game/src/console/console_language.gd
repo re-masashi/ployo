@@ -151,7 +151,7 @@ func tokenize(input: String) -> TokenizationResult:
 
 	return r
 
-static func get_environment_of(obj: Object, base_class: StringName = obj.get_class()) -> Env:
+static func get_environment_of(obj: Object, skip_private: bool = true, rename_internal: bool = false, base_class: StringName = obj.get_class()) -> Env:
 	var env := Env.new()
 	var core_base_methods := ClassDB.class_get_method_list(base_class).map(func(e): return e.name)
 	var core_base_vars := ClassDB.class_get_property_list(base_class).map(func(e): return e.name)
@@ -159,8 +159,14 @@ static func get_environment_of(obj: Object, base_class: StringName = obj.get_cla
 	for method in obj.get_method_list():
 		if method.name in core_base_methods:
 			continue
+		if skip_private and method.name.begins_with("_") and not method.name.begins_with("__"):
+			continue
 		var info := MethodInfo.new()
-		info.name = method.name
+		if rename_internal:
+			info.name = method.name.trim_prefix("__")
+		else:
+			info.name = method.name
+		info.vararg = method.flags & METHOD_FLAG_VARARG
 		var args = method.args
 		for i in args.size():
 			var arg = args[i]
@@ -739,6 +745,36 @@ class Env:
 	func _to_string() -> String:
 		return "Env(\n  methods=%s\n  variables=%s\n)" % [", ".join(methods.keys()), ", ".join(variables.keys())]
 
+	static var _default_env_context := _DefaultEnvContext.new()
+	static var _default := ConsoleLanguage.get_environment_of(_default_env_context, true, true)
+
+	static func default() -> Env:
+		return _default.duplicate()
+
+	class _DefaultEnvContext:
+		func __print(...args) -> void: print.callv(args)
+		func __abs(x): return abs(x)
+		func __min(x, y): return min(x, y)
+		func __max(x, y): return max(x, y)
+		func __sin(x): return sin(x)
+		func __cos(x): return cos(x)
+		func __tan(x): return tan(x)
+		func __asin(x): return asin(x)
+		func __acos(x): return acos(x)
+		func __atan(x): return atan(x)
+		func __deg2rad(x): return deg_to_rad(x)
+		func __rad2deg(x): return rad_to_deg(x)
+		func __log(x, b): return log(x) / log(b)
+		func __ln(x): return log(x)
+		func __log10(x): return log(x) / log(10)
+		func __log2(x): return log(x) / log(2)
+		func __round(x): return round(x)
+		func __floor(x): return floor(x)
+		func __ceil(x): return ceil(x)
+		func __randf(): return randf()
+		func __lerp(a, b, x): return lerp(a, b, x)
+		func __inverse_lerp(a, b, x): return inverse_lerp(a, b, x)
+
 @abstract class ASTNode:
 	var data: Array[Token]
 
@@ -1111,7 +1147,7 @@ class CommandExpr extends Expr:
 		if args.size() < method.arguments.size():
 			e.generate_ast_error(self, "too few arguments for {command} (missing %s)" % ", ".join(method.arguments.slice(args.size()).map(func(arg): return arg.name)))
 			return Executor.stop_immediately
-		elif args.size() > method.arguments.size():
+		elif args.size() > method.arguments.size() and not method.vararg:
 			e.generate_ast_error(self, "too many arguments for {command}")
 			return Executor.stop_immediately
 
@@ -1259,7 +1295,7 @@ class IfStatement extends Statement:
 	func add_completion_env(caret_pos: Vector2i, env: Env) -> void:
 		if caret_in_range_2(caret_pos, scope_start, scope_end):
 			body.add_completion_env(caret_pos, env)
-		else:
+		elif else_body:
 			else_body.add_completion_env(caret_pos, env)
 
 	func _to_string() -> String:
@@ -1379,7 +1415,7 @@ class ForLoopStatement extends Statement:
 			var info := VarInfo.new()
 			info.name = name
 			env.add_variable(info)
-			body.add_completion_env(caret_pos, env)
+		body.add_completion_env(caret_pos, env)
 
 class BreakStatement extends Statement:
 	@warning_ignore("unused_parameter")
@@ -1487,6 +1523,7 @@ class TokenizationResult:
 
 class MethodInfo:
 	var name: String
+	var vararg: bool
 	var arguments: Array[ArgumentInfo]
 	var ret: TypeInfo
 

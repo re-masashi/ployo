@@ -17,8 +17,8 @@ config/icon="res://icon.svg"
 
 [display]
 
-window/stretch/mode="canvas_items"
-window/stretch/aspect="expand"
+window/subwindows/embed_subwindows=false
+window/stretch/aspect="ignore"
 
 [dotnet]
 
