@@ -1482,7 +1482,7 @@ class FunStatement extends Statement:
 				info.name = arg
 				env.add_variable(info)
 			body.add_completion_env(caret_pos, env)
-		if loc_gt(caret_pos, scope_start):
+		if loc_gt(caret_pos, stmt_end):
 			var method_info := MethodInfo.new()
 			method_info.name = name
 			env.add_method(method_info)

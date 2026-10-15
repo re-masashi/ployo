@@ -54,13 +54,17 @@ func _confirm_code_completion(_replace: bool) -> void:
 		var line_index := get_caret_line(caret_index)
 		var line_text := get_line(line_index)
 		var caret_column := clampi(get_caret_column(caret_index), 0, maxi(0, line_text.length() - 1))
-		var i := caret_column
+		var i := caret_column - 1
 		while i >= 0:
 			if not is_deletable(line_text[i]):
 				break
 			backspace(caret_index)
 			i -= 1
-	insert_text_at_caret(option.insert_text + " ")
+		insert_text_at_caret(option.insert_text, caret_index)
+		if line_text[caret_column].strip_edges().is_empty():
+			set_caret_column(get_caret_column(caret_index) + 1, false, caret_index)
+		else:
+			insert_text_at_caret(" ", caret_index)
 	cancel_code_completion.call_deferred()
 
 func _ready() -> void:
