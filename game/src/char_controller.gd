@@ -17,6 +17,15 @@ const PALETTE: Array[Color] = [
 const BASE_SPEED := 4.0
 const SPRINT_MULT := 1.6
 const CROUCH_MULT := 0.5
+const ACCEL_GROUND := 40.0
+const ACCEL_AIR := 12.0
+const STOP_FRICTION := 32.0
+const COYOTE_TIME := 0.10
+const JUMP_BUFFER := 0.12
+const JUMP_CUT := 0.5
+const LAND_DIP_GAIN := 0.012
+const LAND_DIP_MAX := 0.14
+const SPRINT_FOV_BONUS := 4.0
 const CROUCH_HEIGHT_FACTOR := 0.6
 const STAND_CAPSULE_HEIGHT := 2.0
 const GRAVITY := 18.0
@@ -57,6 +66,10 @@ var _throw_t := 0.0
 var _throw_cd := 0.0
 var _grab_pending := false
 var _pending_t := 0.0
+var _coyote := 0.0
+var _jump_buf := 0.0
+var _land_dip := 0.0
+var _base_fov := 75.0
 
 static func spawn_position_for(peer_id: int, marks: Array) -> Vector3:
 	if marks.is_empty():
@@ -95,6 +108,7 @@ func _ready() -> void:
 	player_color = PALETTE[absi(oid) % PALETTE.size()]
 	_anim = $Model.find_child("AnimationPlayer", true, false) as AnimationPlayer
 	_resolve_walk_anim()
+	_base_fov = _cam.fov
 	_prev_pos = global_position
 	_apply_identity()
 	_ray.add_exception(self)
@@ -138,9 +152,6 @@ func _apply_identity() -> void:
 	if not is_node_ready():
 		return
 	_tag.text = player_name
-	# NOTE: char2.glb uses its own textures, so we no longer tint the body
-	# with player_color (that would destroy the textures).
-
 
 func can_sprint() -> bool:
 	return status == StatusState.NORMAL and stance != StanceState.CROUCH and hands == HandsState.EMPTY
@@ -354,7 +365,10 @@ func _physics_process(delta: float) -> void:
 	_status_step(delta)
 	_locomotion_step(delta)
 	_hands_step(delta)
+	var was_floor := is_on_floor()
+	var pre_y := velocity.y
 	move_and_slide()
+	_camera_feel_step(delta, was_floor, pre_y)
 	_authority_anim_update(delta)
 
 
@@ -443,19 +457,50 @@ func _locomotion_step(delta: float) -> void:
 		mult = CROUCH_MULT
 	var speed := BASE_SPEED * speed_factor() * mult
 
+	var accel := ACCEL_GROUND if is_on_floor() else ACCEL_AIR
+	accel *= _accel_factor()
 	if dir != Vector2.ZERO and not stunned:
 		var yaw := _cam.global_rotation.y
 		var wish := Vector3(dir.x, 0.0, dir.y).rotated(Vector3.UP, yaw)
-		velocity.x = wish.x * speed
-		velocity.z = wish.z * speed
+		velocity.x = move_toward(velocity.x, wish.x * speed, accel * delta)
+		velocity.z = move_toward(velocity.z, wish.z * speed, accel * delta)
 	else:
-		velocity.x = move_toward(velocity.x, 0.0, BASE_SPEED * 8.0 * delta)
-		velocity.z = move_toward(velocity.z, 0.0, BASE_SPEED * 8.0 * delta)
+		velocity.x = move_toward(velocity.x, 0.0, STOP_FRICTION * delta)
+		velocity.z = move_toward(velocity.z, 0.0, STOP_FRICTION * delta)
 
-	if not stunned and Input.is_action_just_pressed("jump") and is_on_floor():
+	if is_on_floor():
+		_coyote = COYOTE_TIME
+	else:
+		_coyote = maxf(0.0, _coyote - delta)
+	if not stunned and Input.is_action_just_pressed("jump"):
+		_jump_buf = JUMP_BUFFER
+	else:
+		_jump_buf = maxf(0.0, _jump_buf - delta)
+	if not stunned and _jump_buf > 0.0 and (is_on_floor() or _coyote > 0.0):
 		var jv := _jump_velocity()
 		if jv > 0.0:
 			velocity.y = jv
+			_jump_buf = 0.0
+			_coyote = 0.0
+	if not stunned and Input.is_action_just_released("jump") and velocity.y > 0.5:
+		velocity.y *= JUMP_CUT
+
+
+func _accel_factor() -> float:
+	if carried_item == null:
+		return 1.0
+	return lerpf(1.0, 0.55, clampf((carried_item.weight_kg - 5.0) / 30.0, 0.0, 1.0))
+
+
+func _camera_feel_step(delta: float, was_floor: bool, pre_y: float) -> void:
+	if not was_floor and is_on_floor() and pre_y < -1.0:
+		_land_dip = minf(_land_dip + clampf(-pre_y * LAND_DIP_GAIN, 0.0, LAND_DIP_MAX), 0.16)
+	_land_dip = lerpf(_land_dip, 0.0, clampf(delta * 10.0, 0.0, 1.0))
+	_cam.position.y += _land_dip
+	var want_fov := _base_fov
+	if stance == StanceState.SPRINT and Vector2(velocity.x, velocity.z).length() > 1.0:
+		want_fov += SPRINT_FOV_BONUS
+	_cam.fov = lerpf(_cam.fov, want_fov, clampf(delta * 5.0, 0.0, 1.0))
 
 
 func _apply_stance_visual() -> void:
