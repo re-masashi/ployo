@@ -1,0 +1,9 @@
+description=
+icon=icon.svg
+name=Ployo
+tags=
+
+[version]
+isMono=false
+repo=/godotengine/godot-builds
+tagName=4.8-dev7
