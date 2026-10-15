@@ -1,11 +1,15 @@
 [gd_scene format=3 uid="uid://ch7r27qaydkja"]
 
 [ext_resource type="Script" uid="uid://dys2f12vpk3jh" path="res://src/console/console.gd" id="1_rrraj"]
+[ext_resource type="FontFile" uid="uid://dgdhe2yu0q58m" path="res://assets/fonts/IosevkaWeb-Bold.ttf" id="1_topmy"]
+[ext_resource type="FontFile" uid="uid://bpo8fbwhh0eui" path="res://assets/fonts/IosevkaWeb-BoldItalic.ttf" id="2_d0rfm"]
 [ext_resource type="Script" uid="uid://dbkslocdpdqcd" path="res://src/console/terminal.gd" id="2_wyc7o"]
+[ext_resource type="FontFile" uid="uid://coco4b4wblb7m" path="res://assets/fonts/IosevkaWeb-Italic.ttf" id="3_3kpjo"]
 [ext_resource type="Script" uid="uid://buebuqvccybad" path="res://src/console/console_syntax_highlighter.gd" id="3_hef1m"]
 [ext_resource type="Script" uid="uid://dyu607pupn3c5" path="res://src/console/command_input.gd" id="3_juhpt"]
+[ext_resource type="FontFile" uid="uid://qqpjenuyfm3b" path="res://assets/fonts/IosevkaWeb-Regular.ttf" id="4_wnr0t"]
 
-[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_hef1m"]
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_vv18m"]
 content_margin_left = 4.0
 content_margin_top = 4.0
 content_margin_right = 4.0
@@ -13,19 +17,25 @@ content_margin_bottom = 4.0
 bg_color = Color(0.11764706, 0.11764706, 0.18039216, 1)
 border_color = Color(1, 1, 1, 0)
 
-[sub_resource type="StyleBoxLine" id="StyleBoxLine_g4c7l"]
+[sub_resource type="StyleBoxLine" id="StyleBoxLine_0ukvi"]
 color = Color(0.19215687, 0.19607843, 0.26666668, 1)
 grow_begin = 0.0
 grow_end = 0.0
 thickness = 2
 
-[sub_resource type="Theme" id="Theme_b1sjo"]
-PanelContainer/styles/panel = SubResource("StyleBoxFlat_hef1m")
+[sub_resource type="Theme" id="Theme_upx8w"]
+default_font_size = 14
+PanelContainer/styles/panel = SubResource("StyleBoxFlat_vv18m")
 RichTextLabel/colors/default_color = Color(0.8039216, 0.8392157, 0.95686275, 1)
 RichTextLabel/colors/selection_color = Color(0.5764706, 0.6, 0.69803923, 0.25)
 RichTextLabel/colors/table_border = Color(0.9764706, 0.8862745, 0.6862745, 1)
+RichTextLabel/fonts/bold_font = ExtResource("1_topmy")
+RichTextLabel/fonts/bold_italics_font = ExtResource("2_d0rfm")
+RichTextLabel/fonts/italics_font = ExtResource("3_3kpjo")
+RichTextLabel/fonts/mono_font = ExtResource("4_wnr0t")
+RichTextLabel/fonts/normal_font = ExtResource("4_wnr0t")
 Separator/constants/separation = 2
-Separator/styles/separator = SubResource("StyleBoxLine_g4c7l")
+Separator/styles/separator = SubResource("StyleBoxLine_0ukvi")
 TextEdit/colors/bookmark_color = Color(0.5372549, 0.7058824, 0.98039216, 1)
 TextEdit/colors/brace_mismatch_color = Color(0.9529412, 0.54509807, 0.65882355, 1)
 TextEdit/colors/breakpoint_color = Color(0.9529412, 0.54509807, 0.65882355, 1)
@@ -39,13 +49,15 @@ TextEdit/colors/completion_selected_color = Color(0.19215687, 0.19607843, 0.2666
 TextEdit/colors/current_line_color = Color(0.8039216, 0.8392157, 0.95686275, 0.1)
 TextEdit/colors/executing_line_color = Color(0.9764706, 0.8862745, 0.6862745, 1)
 TextEdit/colors/font_color = Color(0.8039216, 0.8392157, 0.95686275, 1)
-TextEdit/colors/font_placeholder_color = Color(0.5764706, 0.6, 0.69803923, 1)
+TextEdit/colors/font_placeholder_color = Color(0.19215687, 0.19607843, 0.26666668, 1)
 TextEdit/colors/font_readonly_color = Color(0.5764706, 0.6, 0.69803923, 1)
 TextEdit/colors/line_number_color = Color(0.49803922, 0.5176471, 0.6117647, 1)
 TextEdit/colors/search_border_color = Color(0.5803922, 0.8862745, 0.8352941, 1)
 TextEdit/colors/search_result_color = Color(0.19215687, 0.19607843, 0.26666668, 1)
 TextEdit/colors/selection_color = Color(0.5764706, 0.6, 0.69803923, 0.25)
 TextEdit/colors/word_highlighted_color = Color(0.5764706, 0.6, 0.69803923, 0.25)
+TextEdit/constants/caret_width = 2
+TextEdit/fonts/font = ExtResource("4_wnr0t")
 
 [sub_resource type="GDScript" id="GDScript_juhpt"]
 
@@ -62,11 +74,16 @@ script = SubResource("GDScript_topmy")
 [sub_resource type="RichTextEffect" id="RichTextEffect_topmy"]
 script = SubResource("GDScript_wwcyr")
 
+[sub_resource type="GDScript" id="GDScript_lyhuu"]
+
+[sub_resource type="RichTextEffect" id="RichTextEffect_swuks"]
+script = SubResource("GDScript_lyhuu")
+
 [sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_juhpt"]
 
 [sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_hef1m"]
 
-[sub_resource type="SyntaxHighlighter" id="SyntaxHighlighter_d0rfm"]
+[sub_resource type="SyntaxHighlighter" id="SyntaxHighlighter_dh4ii"]
 script = ExtResource("3_hef1m")
 
 [node name="Console" type="Control" unique_id=1789354983]
@@ -76,7 +93,7 @@ anchor_right = 1.0
 anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
-theme = SubResource("Theme_b1sjo")
+theme = SubResource("Theme_upx8w")
 script = ExtResource("1_rrraj")
 
 [node name="PanelContainer" type="PanelContainer" parent="." unique_id=1797372128]
@@ -100,7 +117,7 @@ theme_override_constants/text_highlight_h_padding = 0
 theme_override_constants/text_highlight_v_padding = 0
 scroll_following = true
 autowrap_mode = 0
-custom_effects = [SubResource("RichTextEffect_hef1m"), SubResource("RichTextEffect_d0rfm"), SubResource("RichTextEffect_topmy")]
+custom_effects = [SubResource("RichTextEffect_hef1m"), SubResource("RichTextEffect_d0rfm"), SubResource("RichTextEffect_topmy"), SubResource("RichTextEffect_swuks")]
 selection_enabled = true
 script = ExtResource("2_wyc7o")
 metadata/_custom_type_script = "uid://dbkslocdpdqcd"
@@ -119,7 +136,7 @@ caret_blink = true
 use_default_word_separators = false
 use_custom_word_separators = true
 custom_word_separators = "!\"#%&'()*+,-./:;<=>?@[\\]^`{|}~"
-syntax_highlighter = SubResource("SyntaxHighlighter_d0rfm")
+syntax_highlighter = SubResource("SyntaxHighlighter_dh4ii")
 highlight_all_occurrences = true
 gutters_draw_line_numbers = true
 delimiter_strings = Array[String](["\" \""])
