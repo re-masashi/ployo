@@ -193,6 +193,7 @@ static func get_environment_of(obj: Object, skip_private: bool = true, rename_in
 		info.type = _get_type(variable)
 		info.getter = obj.get.bind(info.name)
 		info.setter = func(v): obj.set(info.name, v)
+		info.readonly = variable.usage & PROPERTY_USAGE_READ_ONLY
 
 		env.add_variable(info)
 
@@ -688,12 +689,22 @@ class Executor:
 			halted = value
 
 	var errors: Array[Dictionary]
+	var warnings: Array[Dictionary]
 
 	func exec_file(env: Env, file: File) -> Variant:
 		return file.compute(self, env)
 
+	func lint_file(env: Env, file: File) -> void:
+		file.lint(self, env)
+
 	func generate_ast_error(node: ASTNode, message: String) -> void:
 		errors.append({
+			RANGE: get_loc_range(node.data),
+			MESSAGE: message.format(node),
+		})
+
+	func generate_ast_warning(node: ASTNode, message: String) -> void:
+		warnings.append({
 			RANGE: get_loc_range(node.data),
 			MESSAGE: message.format(node),
 		})
@@ -719,6 +730,8 @@ class Env:
 	var methods_copied: bool = false
 	var variables_copied: bool = false
 
+	var _is_in_loop: bool
+
 	var methods: Dictionary[StringName, MethodInfo]
 	var variables: Dictionary[StringName, VarInfo]
 
@@ -736,6 +749,7 @@ class Env:
 
 	func duplicate() -> Env:
 		var x := Env.new()
+		x._is_in_loop = _is_in_loop
 		x.methods = methods
 		x.variables = variables
 		x.methods_copied = true
@@ -784,6 +798,10 @@ class Env:
 	func add_completion_env(caret_pos: Vector2i, env: Env) -> void:
 		pass
 
+	@warning_ignore("unused_parameter")
+	func lint(e: Executor, env: Env) -> void:
+		pass
+
 	static func compute_list(e: Executor, env: Env, list: Array[Expr]) -> Variant:
 		var args: Array
 		for arg in list:
@@ -793,6 +811,8 @@ class Env:
 		return args
 
 	static func caret_in_range(caret_pos: Vector2i, loc_range: Vector4i) -> bool:
+		if caret_pos.x == loc_range.x and caret_pos.x == loc_range.z:
+			return caret_pos.y >= loc_range.y and caret_pos.y < loc_range.w
 		if caret_pos.x == loc_range.x:
 			return caret_pos.y >= loc_range.y
 		if caret_pos.x == loc_range.z:
@@ -824,7 +844,6 @@ class Env:
 
 @abstract class Expr extends ASTNode:
 	var type: TypeInfo
-
 
 class TextExpr extends Expr:
 	var text: String
@@ -878,6 +897,10 @@ class VarExpr extends Expr:
 		e.generate_ast_error(self, "unknown variable ${name}")
 		return Executor.stop_immediately
 
+	func lint(e: Executor, env: Env) -> void:
+		if name not in env.variables:
+			e.generate_ast_error(self, "unknown variable ${name}")
+
 class VectorExpr extends Expr:
 	var elements: Array[Expr]
 
@@ -925,6 +948,14 @@ class VectorExpr extends Expr:
 				assert(false)
 				return Executor.stop_immediately
 
+	func lint(e: Executor, env: Env) -> void:
+		if elements.size() > 4:
+			e.generate_ast_error(self, "vector larger than 4")
+		if elements.size() == 0:
+			e.generate_ast_error(self, "empty vector")
+
+		for element in elements:
+			element.lint(e, env)
 
 class ListExpr extends Expr:
 	var elements: Array[Expr]
@@ -934,6 +965,10 @@ class ListExpr extends Expr:
 
 	func compute(e: Executor, env: Env) -> Variant:
 		return compute_list(e, env, elements)
+
+	func lint(e: Executor, env: Env) -> void:
+		for element in elements:
+			element.lint(e, env)
 
 class DictExpr extends Expr:
 	var elements: Dictionary[Expr, Expr]
@@ -953,6 +988,11 @@ class DictExpr extends Expr:
 			if Executor.stop(value): return Executor.stop_immediately
 			result[key] = value
 		return result
+
+	func lint(e: Executor, env: Env) -> void:
+		for element in elements:
+			element.lint(e, env)
+			elements[element].lint(e, env)
 
 class PrefixExpr extends Expr:
 	const COMPATIBLE_TYPES: PackedInt32Array = [
@@ -1030,6 +1070,9 @@ class PrefixExpr extends Expr:
 
 		e.generate_ast_error(self, "incompatible type for " + Op.find_key(op).to_lower())
 		return Executor.stop_immediately
+
+	func lint(e: Executor, env: Env) -> void:
+		expr.lint(e, env)
 
 	func _to_string() -> String:
 		return "(%s %s)" % [Op.find_key(op), expr]
@@ -1131,6 +1174,10 @@ class InfixExpr extends Expr:
 			return Executor.stop_immediately
 		return result
 
+	func lint(e: Executor, env: Env) -> void:
+		left.lint(e, env)
+		right.lint(e, env)
+
 	func _to_string() -> String:
 		return "(%s %s %s)" % [Op.find_key(op), left, right]
 
@@ -1167,6 +1214,19 @@ class CommandExpr extends Expr:
 			e.generate_ast_error(args[logger.position - 1], "cannot convert from %s to %s" % [logger.from_type, logger.to_type])
 			return Executor.stop_immediately
 		return result
+
+	func lint(e: Executor, env: Env) -> void:
+		if command not in env.methods:
+			e.generate_ast_error(self, "unknown command {command}")
+		else:
+			var method := env.methods[command]
+			if args.size() < method.arguments.size():
+				e.generate_ast_error(self, "too few arguments for {command} (missing %s)" % ", ".join(method.arguments.slice(args.size()).map(func(arg): return arg.name)))
+			elif args.size() > method.arguments.size() and not method.vararg:
+				e.generate_ast_error(self, "too many arguments for {command}")
+
+		for arg in args:
+			arg.lint(e, env)
 
 	func _to_string() -> String:
 		return "(%s %s)" % [command, " ".join(args)]
@@ -1206,6 +1266,10 @@ class FieldAccessExpr extends Expr:
 			return Executor.stop_immediately
 		return result
 
+	func lint(e: Executor, env: Env) -> void:
+		target.lint(e, env)
+		field.lint(e, env)
+
 class MethodExpr extends Expr:
 	var target: Expr
 	var command: String
@@ -1238,6 +1302,11 @@ class MethodExpr extends Expr:
 			return Executor.stop_immediately
 		return result
 
+	func lint(e: Executor, env: Env) -> void:
+		target.lint(e, env)
+		for arg in args:
+			arg.lint(e, env)
+
 @abstract class Statement extends ASTNode:
 	pass
 
@@ -1258,6 +1327,10 @@ class CompoundStatement extends Statement:
 		for statement in statements:
 			statement.add_completion_env(caret_pos, env)
 
+	func lint(e: Executor, env: Env) -> void:
+		for statement in statements:
+			statement.lint(e, env)
+
 	func _to_string() -> String:
 		return "\n".join(statements)
 
@@ -1267,6 +1340,9 @@ class ExprStatement extends Statement:
 	func compute(e: Executor, env: Env) -> Variant:
 		var value = expr.compute(e, env)
 		return value
+
+	func lint(e: Executor, env: Env) -> void:
+		expr.lint(e, env)
 
 	func _to_string() -> String:
 		return expr.to_string()
@@ -1298,6 +1374,12 @@ class IfStatement extends Statement:
 		elif else_body:
 			else_body.add_completion_env(caret_pos, env)
 
+	func lint(e: Executor, env: Env) -> void:
+		condition.lint(e, env)
+		body.lint(e, env)
+		if else_body:
+			else_body.lint(e, env)
+
 	func _to_string() -> String:
 		return "if %s\n  %s\nelse\n  %s\nend" % [
 			condition,
@@ -1317,7 +1399,6 @@ class VarDeclStatement extends Statement:
 
 		var info := VarInfo.new()
 		info.name = name
-		info.type = null
 		_make_storage_for(value_value, info)
 		env.add_variable(info)
 		return null
@@ -1334,6 +1415,12 @@ class VarDeclStatement extends Statement:
 			var info := VarInfo.new()
 			info.name = name
 			env.add_variable(info)
+
+	func lint(e: Executor, env: Env) -> void:
+		value.lint(e, env)
+		var info := VarInfo.new()
+		info.name = name
+		env.add_variable(info)
 
 	func _to_string() -> String:
 		return "var ${name} = {value}".format(self)
@@ -1355,8 +1442,17 @@ class VarAssignmentStatement extends Statement:
 		info.setter.call(value_value)
 		return null
 
+	func lint(e: Executor, env: Env) -> void:
+		if name not in env.variables:
+			e.generate_ast_error(self, "unknown variable ${name}")
+		else:
+			var info := env.variables[name]
+			if info.readonly:
+				e.generate_ast_error(self, "cannot assign to read-only variable")
+		value.lint(e, env)
+
 	func _to_string() -> String:
-		return "E${name} = {value}".format(self)
+		return "${name} = {value}".format(self)
 
 class ReturnStatement extends Statement:
 	var value: Expr
@@ -1389,8 +1485,10 @@ class ForLoopStatement extends Statement:
 		if Executor.stop(value): return Executor.stop_immediately
 		if value is not Array and value is not Dictionary and value is not int:
 			e.generate_ast_error(iterator, "cannot be iterated upon")
+			return Executor.stop_immediately
 		var current_value: Array = [null]
 		var loop_var := VarInfo.new()
+		loop_var.readonly = true
 		loop_var.name = name
 		loop_var.getter = func(): return current_value[0]
 		var loop_env := env.duplicate()
@@ -1417,10 +1515,24 @@ class ForLoopStatement extends Statement:
 			env.add_variable(info)
 		body.add_completion_env(caret_pos, env)
 
+	func lint(e: Executor, env: Env) -> void:
+		iterator.lint(e, env)
+		var loop_env := env.duplicate()
+		loop_env._is_in_loop = true
+		var loop_var := VarInfo.new()
+		loop_var.readonly = true
+		loop_var.name = name
+		loop_env.add_variable(loop_var)
+		body.lint(e, loop_env)
+
 class BreakStatement extends Statement:
 	@warning_ignore("unused_parameter")
 	func compute(e: Executor, env: Env) -> Variant:
 		return _StatementResult.new_break(self)
+
+	func lint(e: Executor, env: Env) -> void:
+		if not env._is_in_loop:
+			e.generate_ast_warning(self, "break used outside loop")
 
 	func _to_string() -> String:
 		return "break"
@@ -1429,6 +1541,10 @@ class ContinueStatement extends Statement:
 	@warning_ignore("unused_parameter")
 	func compute(e: Executor, env: Env) -> Variant:
 		return _StatementResult.new_continue(self)
+
+	func lint(e: Executor, env: Env) -> void:
+		if not env._is_in_loop:
+			e.generate_ast_warning(self, "break used outside loop")
 
 	func _to_string() -> String:
 		return "continue"
@@ -1443,9 +1559,7 @@ class FunStatement extends Statement:
 	var stmt_end: Vector2i
 
 	func compute(e: Executor, env: Env) -> Variant:
-		var method_info := MethodInfo.new()
-		method_info.name = name
-		env.add_method(method_info)
+		var method_info := _setup_env(env)
 		var saved_env := env.duplicate()
 		var arguments: Array[ArgumentInfo]
 		for arg in args:
@@ -1477,21 +1591,36 @@ class FunStatement extends Statement:
 
 	func add_completion_env(caret_pos: Vector2i, env: Env) -> void:
 		if caret_in_range_2(caret_pos, scope_start, scope_end):
+			var body_env := env.duplicate()
 			for arg in args:
 				var info := VarInfo.new()
 				info.name = arg
-				env.add_variable(info)
-			body.add_completion_env(caret_pos, env)
+				body_env.add_variable(info)
+			body.add_completion_env(caret_pos, body_env)
 		if loc_gt(caret_pos, stmt_end):
-			var method_info := MethodInfo.new()
-			method_info.name = name
-			env.add_method(method_info)
-			var arguments: Array[ArgumentInfo]
-			for arg in args:
-				var info := ArgumentInfo.new()
-				info.name = arg
-				arguments.append(info)
-			method_info.arguments = arguments
+			_setup_env(env)
+
+	func lint(e: Executor, env: Env) -> void:
+		_setup_env(env)
+		var body_env := env.duplicate()
+		body_env._is_in_loop = false
+		for arg in args:
+			var info := VarInfo.new()
+			info.name = arg
+			body_env.add_variable(info)
+		body.lint(e, body_env)
+
+	func _setup_env(env: Env) -> MethodInfo:
+		var method_info := MethodInfo.new()
+		method_info.name = name
+		var arguments: Array[ArgumentInfo]
+		for arg in args:
+			var info := ArgumentInfo.new()
+			info.name = arg
+			arguments.append(info)
+		method_info.arguments = arguments
+		env.add_method(method_info)
+		return method_info
 
 	func _to_string() -> String:
 		return "fun %s %s\n  %s\nend" % [name, " ".join(args), str(body).replace("\n", "\n  ")]
@@ -1535,6 +1664,8 @@ class VarInfo:
 
 	var setter: Callable
 	var getter: Callable
+
+	var readonly: bool
 
 class ArgumentInfo extends VarInfo:
 	var optional: bool

@@ -32,7 +32,7 @@ func _init() -> void:
 func _ready() -> void:
 	command_input.command_submitted.connect(execute_command)
 
-func spans_to_bbcode(text: String, spans: Array[Dictionary]) -> String:
+static func spans_to_bbcode(text: String, spans: Array[Dictionary]) -> String:
 	var sb: PackedStringArray
 	for i in text.length():
 		var spans_im_in: Array[Dictionary] = []
@@ -48,7 +48,7 @@ func spans_to_bbcode(text: String, spans: Array[Dictionary]) -> String:
 			sb.append(span.close)
 	return "".join(sb)
 
-func highlight_line(line: String, extra_spans: Array[Dictionary] = []) -> String:
+static func highlight_line(line: String, extra_spans: Array[Dictionary] = []) -> String:
 	var hl_tokens := ConsoleSyntaxHighlighter.get_line_syntax_highlighting_tokens(line)
 	var spans: Array[Dictionary]
 	for pos in hl_tokens:
@@ -107,7 +107,7 @@ func _execute_command(command: String) -> Variant:
 	#print(file)
 	var exec := ConsoleLanguage.Executor.new()
 	start = Time.get_ticks_usec()
-	var result = exec.exec_file(environment, file)
+	var result = exec.exec_file(environment.duplicate(), file)
 	#print("execution took %.2f ms" % ((Time.get_ticks_usec() - start) * 1e-3))
 	if not exec.errors.is_empty():
 		_print_errors(command, exec.errors)
@@ -200,6 +200,8 @@ func make_theme(c: Catppuccin = C_THEME) -> Theme:
 
 	t.set_constant("separation", "Separator", 2)
 	t.set_stylebox("separator", "Separator", new_line(c.surface0))
+
+	t.set_stylebox("panel", "TooltipPanel", new_flat(c.mantle, [8], [4]))
 
 	return t
 
