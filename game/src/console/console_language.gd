@@ -98,42 +98,40 @@ func tokenize(input: String) -> TokenizationResult:
 				line += 1
 				line_start = i + 1
 		else:
+			var longest_token: Token = null
+			var longest_token_length: int = 0
 			for token in _LITERAL_TOKENS:
 				if i < input.length() - token.length() + 1 and input.substr(i, token.length()) == token:
 					found_match = true
-					if not r.tokens.is_empty() and token == "if" and r.tokens[-1].type == Token.Type.KwElse:
-						# if an `if` token follows an `else` with nothing in between, turn it into `else if` (one token)
-						r.tokens[-1].content = "else if"
-						r.tokens[-1].loc.w = line_i + token.length()
-						r.tokens[-1].type = Token.Type.KwElseIf
-					else:
-						var tk := Token.new()
-						tk.loc = Vector4i(line, line_i, line, line_i + token.length())
-						tk.content = token
-						tk.type = _LITERAL_TOKENS[token]
-						r.tokens.append(tk)
-					i += token.length() - 1
+					var tk := Token.new()
+					tk.loc = Vector4i(line, line_i, line, line_i + token.length())
+					tk.content = token
+					tk.type = _LITERAL_TOKENS[token]
+					longest_token = tk
+					longest_token_length = token.length()
 					break
-			if found_match == false:
-				var substr := input.substr(i)
-				var longest_token: Token = null
-				var longest_token_length: int = 0
-				for matcher in _matchers:
-					var m := matcher.search(substr)
-					if m == null:
-						continue
-					found_match = true
-					var end := m.get_end()
-					if end > longest_token_length:
-						if longest_token == null:
-							longest_token = Token.new()
-						longest_token_length = end
-						longest_token.loc = Vector4i(line, line_i, line, line_i + end)
-						longest_token.content = m.get_string(1)
-						longest_token.type = _matchers[matcher]
-				if longest_token != null:
+			var substr := input.substr(i)
+			for matcher in _matchers:
+				var m := matcher.search(substr)
+				if m == null:
+					continue
+				found_match = true
+				var end := m.get_end()
+				if end > longest_token_length:
+					if longest_token == null:
+						longest_token = Token.new()
+					longest_token_length = end
+					longest_token.loc = Vector4i(line, line_i, line, line_i + end)
+					longest_token.content = m.get_string(1)
+					longest_token.type = _matchers[matcher]
+			if longest_token != null:
+				if not r.tokens.is_empty() and longest_token.type == Token.Type.KwIf and r.tokens[-1].type == Token.Type.KwElse:
+					r.tokens[-1].content = "else if"
+					r.tokens[-1].loc.w = longest_token.loc.w
+					r.tokens[-1].type = Token.Type.KwElseIf
+				else:
 					r.tokens.append(longest_token)
-					i += longest_token_length - 1
+				i += longest_token_length - 1
 		if not found_match and range_start == _NO_RANGE:
 			range_start = Vector2i(line, line_i)
 		if found_match and range_start != _NO_RANGE:
@@ -767,6 +765,8 @@ class Env:
 
 	class _DefaultEnvContext:
 		func __print(...args) -> void: print.callv(args)
+		func __printf(fmt: String, ...args) -> void: print(fmt.format(args))
+		func __sprintf(fmt: String, ...args) -> String: return fmt.format(args)
 		func __abs(x): return abs(x)
 		func __min(x, y): return min(x, y)
 		func __max(x, y): return max(x, y)
