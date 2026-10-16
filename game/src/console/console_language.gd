@@ -1591,12 +1591,11 @@ class FunStatement extends Statement:
 
 	func add_completion_env(caret_pos: Vector2i, env: Env) -> void:
 		if caret_in_range_2(caret_pos, scope_start, scope_end):
-			var body_env := env.duplicate()
 			for arg in args:
 				var info := VarInfo.new()
 				info.name = arg
-				body_env.add_variable(info)
-			body.add_completion_env(caret_pos, body_env)
+				env.add_variable(info)
+			body.add_completion_env(caret_pos, env)
 		if loc_gt(caret_pos, stmt_end):
 			_setup_env(env)
 
