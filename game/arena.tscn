@@ -6,9 +6,9 @@
 [ext_resource type="Material" uid="uid://v7a7plinpmab" path="res://materials/kenney_prototype-textures/Light/texture_01.tres" id="4_light"]
 [ext_resource type="Texture2D" uid="uid://duyeybtlls0ih" path="res://assets/Skyboxes/skybox-day.png" id="5_sky"]
 [ext_resource type="Script" uid="uid://cahiscadube5x" path="res://src/net_manager.gd" id="6_net"]
-[ext_resource type="PackedScene" path="res://items/vase_light.tscn" id="7_vase"]
-[ext_resource type="PackedScene" path="res://items/crate_medium.tscn" id="8_crate"]
-[ext_resource type="PackedScene" path="res://items/safe_heavy.tscn" id="9_safe"]
+[ext_resource type="PackedScene" uid="uid://prf4w5ym572j" path="res://items/vase_light.tscn" id="7_vase"]
+[ext_resource type="PackedScene" uid="uid://b8q2qeit5nj8e" path="res://items/crate_medium.tscn" id="8_crate"]
+[ext_resource type="PackedScene" uid="uid://h3vrfpatlilp" path="res://items/safe_heavy.tscn" id="9_safe"]
 [ext_resource type="Script" uid="uid://bl1lyhw22qan1" path="res://src/items/extraction_pad.gd" id="10_pad"]
 
 [sub_resource type="PanoramaSkyMaterial" id="PanoramaSkyMaterial_arena"]
