@@ -2,6 +2,7 @@
 
 [ext_resource type="Script" uid="uid://b8dfbjd8tkpxt" path="res://src/char_controller.gd" id="1_i25i0"]
 [ext_resource type="PackedScene" uid="uid://dwt54viglddjv" path="res://assets/models/char2.glb" id="2_char2"]
+[ext_resource type="Script" uid="uid://4txsqj0ni16m" path="res://src/trajectory_preview.gd" id="3_preview"]
 
 [sub_resource type="CapsuleShape3D" id="CapsuleShape3D_6mibh"]
 radius = 0.2631836
@@ -14,6 +15,24 @@ properties/0/replication_mode = 1
 properties/1/path = NodePath(".:rotation")
 properties/1/spawn = true
 properties/1/replication_mode = 1
+properties/2/path = NodePath(".:downed")
+properties/2/spawn = true
+properties/2/replication_mode = 1
+properties/3/path = NodePath(".:carrying_loot")
+properties/3/spawn = true
+properties/3/replication_mode = 1
+properties/4/path = NodePath(".:stance")
+properties/4/spawn = true
+properties/4/replication_mode = 1
+properties/5/path = NodePath(".:status")
+properties/5/spawn = true
+properties/5/replication_mode = 1
+properties/6/path = NodePath(".:carried_by_player_id")
+properties/6/spawn = true
+properties/6/replication_mode = 1
+properties/7/path = NodePath(".:carrying_player")
+properties/7/spawn = true
+properties/7/replication_mode = 1
 
 [node name="CharacterBody3D" type="CharacterBody3D" unique_id=601084684]
 collision_layer = 2
@@ -48,6 +67,9 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.15, -1.1)
 [node name="GrabRay" type="RayCast3D" parent="Camera3D" unique_id=1818747689]
 unique_name_in_owner = true
 target_position = Vector3(0, 0, -2.8)
+
+[node name="ThrowPreview" type="Node3D" parent="." unique_id=572664431]
+script = ExtResource("3_preview")
 
 [node name="MultiplayerSynchronizer" type="MultiplayerSynchronizer" parent="." unique_id=1269854612]
 replication_config = SubResource("SceneReplicationConfig_sync")

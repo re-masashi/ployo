@@ -10,6 +10,8 @@
 [ext_resource type="PackedScene" uid="uid://b8q2qeit5nj8e" path="res://items/crate_medium.tscn" id="8_crate"]
 [ext_resource type="PackedScene" uid="uid://h3vrfpatlilp" path="res://items/safe_heavy.tscn" id="9_safe"]
 [ext_resource type="Script" uid="uid://bl1lyhw22qan1" path="res://src/items/extraction_pad.gd" id="10_pad"]
+[ext_resource type="Script" uid="uid://c5c8kpyopmq0m" path="res://src/systems/game_director.gd" id="11_director"]
+[ext_resource type="Script" uid="uid://c204owwt8q282" path="res://src/systems/ship_system.gd" id="12_ship_system"]
 
 [sub_resource type="PanoramaSkyMaterial" id="PanoramaSkyMaterial_arena"]
 panorama = ExtResource("5_sky")
@@ -132,10 +134,10 @@ size = Vector3(3, 0.35, 2.1)
 size = Vector3(3, 0.35, 2.1)
 
 [sub_resource type="BoxShape3D" id="BoxShape_Floor"]
-size = Vector3(30, 0.1, 30)
+size = Vector3(42, 0.1, 42)
 
 [sub_resource type="BoxMesh" id="BoxMesh_Floor"]
-size = Vector3(30, 0.1, 30)
+size = Vector3(42, 0.1, 42)
 
 [sub_resource type="BoxShape3D" id="BoxShape_Pad"]
 size = Vector3(3, 1.2, 3)
@@ -153,6 +155,7 @@ transform = Transform3D(0.819152, -0.40558, 0.40558, 0, 0.707107, 0.707107, -0.5
 shadow_enabled = true
 
 [node name="Playground" type="Node3D" parent="." unique_id=251913875]
+transform = Transform3D(1.25, 0, 0, 0, 1, 0, 0, 0, 1.25, 0, 0, 0)
 
 [node name="BigPlatform" type="StaticBody3D" parent="Playground" unique_id=1235664292]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 7, 0.4, 3)
@@ -334,6 +337,39 @@ shape = SubResource("BoxShape_SouthRamp")
 material_override = ExtResource("3_purple")
 mesh = SubResource("BoxMesh_SouthRamp")
 
+[node name="Systems" type="Node3D" parent="." unique_id=774100020]
+
+[node name="Engine" type="StaticBody3D" parent="Systems" unique_id=684402183]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -15.5, 0.8, -15.5)
+script = ExtResource("12_ship_system")
+fail_after = 130.0
+accent = Color(0.85, 0.35, 0.2, 1)
+
+[node name="Power" type="StaticBody3D" parent="Systems" unique_id=467146532]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 15.5, 0.8, -15.5)
+script = ExtResource("12_ship_system")
+system_id = "power"
+display_name = "POWER"
+fail_after = 150.0
+accent = Color(0.95, 0.8, 0.2, 1)
+
+[node name="Fuel" type="StaticBody3D" parent="Systems" unique_id=606664432]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -15.5, 0.8, 15.5)
+script = ExtResource("12_ship_system")
+system_id = "fuel"
+display_name = "FUEL"
+fail_after = 170.0
+accent = Color(0.8, 0.3, 0.55, 1)
+
+[node name="Pump" type="StaticBody3D" parent="Systems" unique_id=1806029591]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 15.5, 0.8, 15.5)
+script = ExtResource("12_ship_system")
+system_id = "pump"
+display_name = "BILGE PUMP"
+fail_after = 115.0
+critical = false
+accent = Color(0.25, 0.55, 0.8, 1)
+
 [node name="Floor" type="StaticBody3D" parent="." unique_id=503148133]
 
 [node name="CollisionShape3D" type="CollisionShape3D" parent="Floor" unique_id=900000001]
@@ -349,13 +385,33 @@ mesh = SubResource("BoxMesh_Floor")
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1, 0)
 
 [node name="Spawn2" type="Marker3D" parent="SpawnPoints" unique_id=1039910967 groups=["spawn_points"]]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 5, 1, 5)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 8, 1, 8)
 
 [node name="Spawn3" type="Marker3D" parent="SpawnPoints" unique_id=692081001 groups=["spawn_points"]]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -5, 1, 5)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -8, 1, 8)
 
 [node name="Spawn4" type="Marker3D" parent="SpawnPoints" unique_id=1757565456 groups=["spawn_points"]]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1, -6)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1, -10)
+
+[node name="CrewSpawnPoints" type="Node3D" parent="." unique_id=774100021]
+
+[node name="CrewSpawn1" type="Marker3D" parent="CrewSpawnPoints" unique_id=1715713154]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -17, 1.1, 0)
+
+[node name="CrewSpawn2" type="Marker3D" parent="CrewSpawnPoints" unique_id=2126989897]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -8.5, 1.1, 14.7)
+
+[node name="CrewSpawn3" type="Marker3D" parent="CrewSpawnPoints" unique_id=203324469]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 8.5, 1.1, 14.7)
+
+[node name="CrewSpawn4" type="Marker3D" parent="CrewSpawnPoints" unique_id=410634714]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 17, 1.1, 0)
+
+[node name="CrewSpawn5" type="Marker3D" parent="CrewSpawnPoints" unique_id=715916664]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 8.5, 1.1, -14.7)
+
+[node name="CrewSpawn6" type="Marker3D" parent="CrewSpawnPoints" unique_id=270499868]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -8.5, 1.1, -14.7)
 
 [node name="Players" type="Node3D" parent="." unique_id=2092624638]
 
@@ -369,16 +425,16 @@ script = ExtResource("6_net")
 [node name="Loot" type="Node3D" parent="." unique_id=774100001]
 
 [node name="VaseLight" parent="Loot" unique_id=1284371654 instance=ExtResource("7_vase")]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -6, 1.8, -4)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -7.5, 1.8, -5)
 
 [node name="CrateMedium" parent="Loot" unique_id=1386158955 instance=ExtResource("8_crate")]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 7, 1.5, 3)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 8.75, 1.5, 3.75)
 
 [node name="SafeHeavy" parent="Loot" unique_id=1797517218 instance=ExtResource("9_safe")]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -2.5, 0.9, -6.5)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -3.125, 0.9, -8.125)
 
 [node name="ExtractionPad" type="Area3D" parent="." unique_id=774100002]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.6, 5)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.6, 8)
 script = ExtResource("10_pad")
 
 [node name="CollisionShape3D" type="CollisionShape3D" parent="ExtractionPad" unique_id=774100003]
@@ -396,3 +452,12 @@ billboard = 1
 no_depth_test = true
 text = "EXTRACTION"
 font_size = 64
+
+[node name="Crew" type="Node3D" parent="." unique_id=774100010]
+
+[node name="CrewSpawner" type="MultiplayerSpawner" parent="." unique_id=774100011]
+_spawnable_scenes = PackedStringArray("uid://dpmg57w62ba0m")
+spawn_path = NodePath("../Crew")
+
+[node name="GameDirector" type="Node" parent="." unique_id=774100012]
+script = ExtResource("11_director")

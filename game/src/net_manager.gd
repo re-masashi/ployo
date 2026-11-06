@@ -178,9 +178,25 @@ func _on_peer_connected(peer_id: int) -> void:
 
 func _on_peer_disconnected(peer_id: int) -> void:
 	if multiplayer.is_server():
+		_release_player_carries(peer_id)
 		_reclaim_carried(peer_id)
 		_despawn_player(peer_id)
+		PlayerController.prune_carry_claims(get_tree().root)
 		_refresh_roster()
+
+
+func _release_player_carries(peer_id: int) -> void:
+	var departing := _players.get_node_or_null(str(peer_id)) as PlayerController
+	if departing != null:
+		PlayerController.drop_carry_claim(str(departing.get_path()))
+	for n in get_tree().get_nodes_in_group("players"):
+		var p := n as PlayerController
+		if p != null and p.carried_by_player_id == peer_id:
+			p.set_carried_by_player(0)
+	for path in PlayerController.release_carry_claims_for(peer_id):
+		var p := get_node_or_null(NodePath(path)) as PlayerController
+		if p != null:
+			p.set_carried_by_player(0)
 
 
 func _reclaim_carried(peer_id: int) -> void:

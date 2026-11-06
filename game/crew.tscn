@@ -1,0 +1,47 @@
+[gd_scene format=3 uid="uid://dpmg57w62ba0m"]
+
+[ext_resource type="Script" uid="uid://iiqkr1ua821u" path="res://src/crew/crew_agent.gd" id="1_crew"]
+[ext_resource type="Script" uid="uid://diaina66itm2e" path="res://src/crew/crew_model.gd" id="2_model"]
+[ext_resource type="PackedScene" uid="uid://dwt54viglddjv" path="res://assets/models/char2.glb" id="3_char2"]
+
+[sub_resource type="CapsuleShape3D" id="CapsuleShape_crew"]
+radius = 0.3
+height = 1.7
+
+[sub_resource type="SceneReplicationConfig" id="SceneReplicationConfig_crew"]
+properties/0/path = NodePath(".:position")
+properties/0/spawn = true
+properties/0/replication_mode = 1
+properties/1/path = NodePath(".:rotation")
+properties/1/spawn = true
+properties/1/replication_mode = 1
+properties/2/path = NodePath(".:net_state")
+properties/2/spawn = true
+properties/2/replication_mode = 1
+
+[node name="CrewAgent" type="CharacterBody3D" unique_id=39459175]
+script = ExtResource("1_crew")
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="." unique_id=888236925]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.85, 0)
+shape = SubResource("CapsuleShape_crew")
+
+[node name="Visual" type="Node3D" parent="."]
+
+[node name="Model" type="Node3D" parent="Visual" unique_id=485978704]
+transform = Transform3D(0.3, 0, 0, 0, 0.3, 0, 0, 0, 0.3, 0, -0.64241236, 0)
+script = ExtResource("2_model")
+
+[node name="Char2" parent="Visual/Model" unique_id=1769589328 instance=ExtResource("3_char2")]
+transform = Transform3D(0.99999976, 0, 0, 0, 0.99999976, 0, 0, 0, 0.99999976, 0, 6.9542933, 0)
+
+[node name="StateLabel" type="Label3D" parent="." unique_id=2013597488]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.15, 0)
+pixel_size = 0.01
+billboard = 1
+no_depth_test = true
+text = "Crew"
+font_size = 48
+
+[node name="MultiplayerSynchronizer" type="MultiplayerSynchronizer" parent="." unique_id=497746246]
+replication_config = SubResource("SceneReplicationConfig_crew")

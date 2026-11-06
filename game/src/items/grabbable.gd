@@ -53,8 +53,15 @@ func _integrate_forces(state: PhysicsDirectBodyState3D) -> void:
 	_prev_speed = state.linear_velocity.length()
 
 
-func _on_body_entered(_body: Node) -> void:
-	apply_impact(_prev_speed)
+func _on_body_entered(body: Node) -> void:
+	var impact := maxf(_prev_speed, linear_velocity.length())
+	apply_impact(impact)
+	var crew := body as CrewAgent
+	if crew != null and impact > 3.0:
+		if multiplayer.has_multiplayer_peer() and not multiplayer.is_server():
+			crew.request_impact.rpc_id(1, impact)
+		else:
+			crew.receive_impact(impact, self)
 
 
 func set_net_authority(peer_id: int) -> void:
@@ -111,6 +118,8 @@ func apply_impact(impact_speed: float) -> void:
 		return
 	if impact_speed <= break_impact_speed:
 		return
+	if impact_speed > 3.0:
+		NoiseBus.emit_noise(global_position, clampf(impact_speed * 0.16, 0.3, 1.4), self)
 	hp -= (impact_speed - break_impact_speed) * fragility
 	if hp <= 0.0:
 		_break()
