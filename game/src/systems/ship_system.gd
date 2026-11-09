@@ -13,6 +13,7 @@ enum SState { OK, FAILED }
 @export var critical := true
 @export var size := Vector3(1.3, 1.5, 0.9)
 @export var accent := Color(0.9, 0.5, 0.15)
+@export var start_failed := false
 
 var state: SState = SState.OK
 var _fail_t := 0.0
@@ -24,12 +25,16 @@ var _light: OmniLight3D
 var _mat: StandardMaterial3D
 var _last_sync := 0.0
 var _state_sync_t := 0.0
+var _fail_flash_t := 0.0
+var _synced_label := ""
 
 
 func _ready() -> void:
 	add_to_group("ship_systems")
 	_build_visuals()
 	_fail_t = fail_after * randf_range(0.65, 1.35)
+	if start_failed:
+		state = SState.FAILED
 	_refresh_local()
 
 
@@ -68,11 +73,10 @@ func _build_visuals() -> void:
 	pipe.material_override = metal
 	add_child(pipe)
 
-	_label = Label3D.new()
+	_label = ProximityLabel.new()
 	_label.position = Vector3(0.0, size.y * 0.5 + 0.55, 0.0)
 	_label.pixel_size = 0.01
 	_label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
-	_label.no_depth_test = true
 	_label.font_size = 48
 	add_child(_label)
 
@@ -85,6 +89,9 @@ func _build_visuals() -> void:
 
 
 func _physics_process(delta: float) -> void:
+	if _fail_flash_t > 0.0:
+		_fail_flash_t = maxf(0.0, _fail_flash_t - delta)
+		_refresh_local()
 	if not _server():
 		return
 	_state_sync_t += delta
@@ -139,18 +146,70 @@ func _repair() -> void:
 
 
 func _cancel_repair() -> void:
-	_repairer = null
-	_progress = 0.0
-	_broadcast()
+	if _repairer != null:
+		_stop_repair(_repairer, true)
+	else:
+		_progress = 0.0
+		_broadcast()
 
 
 func interact(player: Node3D) -> void:
+	interact_begin(player)
+
+
+func interact_begin(player: Node3D) -> void:
 	if state == SState.OK:
 		return
 	if multiplayer.has_multiplayer_peer() and not multiplayer.is_server():
 		_request_repair.rpc_id(1, player.get_path())
 		return
 	_start_repair(player)
+
+
+func interact_hold(_player: Node3D, _delta: float) -> void:
+	pass
+
+
+func wants_hold() -> bool:
+	return state == SState.FAILED
+
+
+func hold_progress() -> float:
+	return clampf(_progress / maxf(repair_time, 0.01), 0.0, 1.0)
+
+
+func hold_text() -> String:
+	return "%s - HOLD E" % display_name
+
+
+func interact_end(player: Node3D, failed: bool = true) -> void:
+	if multiplayer.has_multiplayer_peer() and not multiplayer.is_server():
+		_request_stop_repair.rpc_id(1, player.get_path(), failed)
+		return
+	_stop_repair(player, failed)
+
+
+@rpc("any_peer")
+func _request_stop_repair(player_path: String, failed: bool) -> void:
+	if not multiplayer.is_server():
+		return
+	var p := get_node_or_null(player_path) as Node3D
+	if p == null:
+		return
+	_stop_repair(p, failed)
+
+
+func _stop_repair(player: Node3D, failed: bool) -> void:
+	if _repairer != player:
+		return
+	var had_progress := _progress > 0.01
+	_repairer = null
+	_progress = 0.0
+	if failed and had_progress:
+		_fail_flash_t = 1.4
+		NoiseBus.emit_noise(global_position, 0.7, self)
+		print("[Ship] %s repair failed" % display_name)
+	_broadcast()
 
 
 @rpc("any_peer")
@@ -170,6 +229,7 @@ func _start_repair(player: Node3D) -> void:
 		return
 	_repairer = player
 	_progress = 0.0
+	_fail_flash_t = 0.0
 	_broadcast()
 
 
@@ -199,23 +259,29 @@ func _broadcast() -> void:
 func _sync_visuals(is_failed_now: bool, progress: float, text: String) -> void:
 	state = SState.FAILED if is_failed_now else SState.OK
 	_progress = progress
-	if _label != null:
-		_label.text = text
+	_synced_label = text
 	_refresh_local()
 
 
 func _label_text() -> String:
+	if not _server() and not _synced_label.is_empty():
+		return _synced_label
 	if state == SState.OK:
 		return "%s\nONLINE" % display_name
+	if _fail_flash_t > 0.0:
+		return "%s\nREPAIR FAILED" % display_name
 	if _repairer != null:
-		return "%s\nREPAIRING %d%%" % [display_name, int(100.0 * _progress / maxf(repair_time, 0.01))]
-	return "%s\nFAILED - E" % display_name
+		return "%s\nHOLD E  %d%%" % [display_name, int(100.0 * _progress / maxf(repair_time, 0.01))]
+	return "%s\nFAILED - HOLD E" % display_name
 
 
 func _refresh_local() -> void:
 	if _label != null:
 		_label.text = _label_text()
-		_label.modulate = Color(1.0, 0.3, 0.22) if state == SState.FAILED else Color(0.6, 1.0, 0.65)
+		if _fail_flash_t > 0.0:
+			_label.modulate = Color(1.0, 0.85, 0.25)
+		else:
+			_label.modulate = Color(1.0, 0.3, 0.22) if state == SState.FAILED else Color(0.6, 1.0, 0.65)
 	if _light != null:
 		_light.light_energy = 1.6 if state == SState.FAILED else 0.0
 	if _mat != null:

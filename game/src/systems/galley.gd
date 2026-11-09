@@ -43,11 +43,10 @@ func _build() -> void:
 	plate.material_override = metal
 	add_child(plate)
 
-	_label = Label3D.new()
+	_label = ProximityLabel.new()
 	_label.position = Vector3(0.0, size.y * 0.5 + 0.7, 0.0)
 	_label.pixel_size = 0.01
 	_label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
-	_label.no_depth_test = true
 	_label.font_size = 44
 	_label.text = "GALLEY\nE to eat"
 	_label.modulate = Color(1.0, 0.82, 0.5)

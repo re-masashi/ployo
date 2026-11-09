@@ -141,6 +141,7 @@ var carried_by_player_id: int = 0:
 var _punch_cd := 0.0
 var _step_t := 0.0
 var _buffs: Dictionary = {}
+var _hold_target: Node = null
 
 static func spawn_position_for(peer_id: int, marks: Array) -> Vector3:
 	if marks.is_empty():
@@ -257,6 +258,20 @@ func is_captured() -> bool:
 
 func get_health() -> float:
 	return health
+
+
+func get_hold_progress() -> float:
+	if _hold_target == null or not is_instance_valid(_hold_target):
+		return -1.0
+	if _hold_target.has_method("hold_progress"):
+		return _hold_target.hold_progress()
+	return 0.0
+
+
+func get_hold_text() -> String:
+	if _hold_target != null and is_instance_valid(_hold_target) and _hold_target.has_method("hold_text"):
+		return _hold_target.hold_text()
+	return "HOLD E"
 
 func speed_factor() -> float:
 	var f := 1.0
@@ -886,6 +901,30 @@ func _apply_stance_visual() -> void:
 			_model.scale = Vector3.ONE * MODEL_BASE_SCALE
 
 
+func _update_hold(delta: float) -> void:
+	if _hold_target == null or not is_instance_valid(_hold_target):
+		_hold_target = null
+		return
+	if not Input.is_action_pressed("grab"):
+		_end_hold()
+		return
+	_ray.force_raycast_update()
+	if _ray.get_collider() != _hold_target:
+		_end_hold()
+		return
+	if _hold_target.has_method("interact_hold"):
+		_hold_target.interact_hold(self, delta)
+	if _hold_target != null and _hold_target.has_method("wants_hold") and not _hold_target.wants_hold():
+		_hold_target = null
+
+
+func _end_hold() -> void:
+	var target := _hold_target
+	_hold_target = null
+	if target != null and is_instance_valid(target) and target.has_method("interact_end"):
+		target.interact_end(self, true)
+
+
 func _hands_step(delta: float) -> void:
 	_punch_cd = maxf(0.0, _punch_cd - delta)
 	if _throw_t > 0.0:
@@ -893,6 +932,17 @@ func _hands_step(delta: float) -> void:
 		if _throw_t <= 0.0 and hands == HandsState.THROWING:
 			hands = HandsState.EMPTY
 	if status == StatusState.STUNNED:
+		_end_hold()
+		return
+
+	if Input.is_action_just_pressed("lock_door"):
+		_ray.force_raycast_update()
+		var lock_col := _ray.get_collider()
+		if lock_col is Door and (lock_col as Door).lockable:
+			(lock_col as Door).toggle_lock()
+
+	if _hold_target != null:
+		_update_hold(delta)
 		return
 
 	if carried_crew != null and not is_instance_valid(carried_crew):
@@ -942,6 +992,9 @@ func _hands_step(delta: float) -> void:
 				_server_or_direct_crew_grab(crew)
 			else:
 				print("[Hands] crew not liftable (", crew.state_name(), ")")
+		elif col != null and col.has_method("interact_begin"):
+			col.interact_begin(self)
+			_hold_target = col
 		elif col != null and col.has_method("interact"):
 			col.interact(self)
 		elif col is PlayerController:

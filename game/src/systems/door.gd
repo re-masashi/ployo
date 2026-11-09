@@ -4,11 +4,12 @@ extends AnimatableBody3D
 @export var size := Vector3(1.5, 2.2, 0.12)
 @export var accent := Color(0.45, 0.5, 0.58)
 @export var open_angle := -1.45
+@export var lockable := false
 
 var _open := false
 var _locked := false
 var _tween: Tween
-var _label: Label3D
+var _bar_mat: StandardMaterial3D
 
 
 func _ready() -> void:
@@ -42,19 +43,11 @@ func _build() -> void:
 	bar_mesh.size = Vector3(size.x * 0.7, 0.08, 0.05)
 	bar.mesh = bar_mesh
 	bar.position = shape.position + Vector3(0.0, 0.0, size.z * 0.5 + 0.03)
-	var bar_mat := StandardMaterial3D.new()
-	bar_mat.albedo_color = Color(0.85, 0.75, 0.35)
-	bar_mat.metallic = 0.6
-	bar.material_override = bar_mat
+	_bar_mat = StandardMaterial3D.new()
+	_bar_mat.albedo_color = Color(0.85, 0.75, 0.35)
+	_bar_mat.metallic = 0.6
+	bar.material_override = _bar_mat
 	add_child(bar)
-
-	_label = Label3D.new()
-	_label.position = shape.position + Vector3(0.0, 0.35, size.z * 0.5 + 0.08)
-	_label.pixel_size = 0.006
-	_label.font_size = 36
-	_label.text = "BRIG"
-	_label.modulate = Color(1.0, 0.9, 0.55)
-	add_child(_label)
 
 
 func is_open() -> bool:
@@ -71,9 +64,16 @@ func lock(value: bool) -> void:
 	_locked = value
 	if _locked:
 		_set_open(false)
-	_refresh_label()
+	_refresh_lock_visual()
 	if multiplayer.has_multiplayer_peer():
 		_sync_lock.rpc(value)
+
+
+func toggle_lock() -> void:
+	if not lockable:
+		return
+	lock(not _locked)
+	NoiseBus.emit_noise(global_position, 0.35, self)
 
 
 func open() -> void:
@@ -106,7 +106,7 @@ func _sync_lock(value: bool) -> void:
 	_locked = value
 	if _locked:
 		_set_open(false)
-	_refresh_label()
+	_refresh_lock_visual()
 
 
 func _set_open(open: bool) -> void:
@@ -120,15 +120,13 @@ func _set_open(open: bool) -> void:
 	_tween = create_tween()
 	_tween.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
 	_tween.tween_property(self, "rotation:y", open_angle if open else 0.0, 0.28)
-	_refresh_label()
 
 
-func _refresh_label() -> void:
-	if _label == null:
+
+func _refresh_lock_visual() -> void:
+	if _bar_mat == null or not lockable:
 		return
-	if _locked:
-		_label.text = "BRIG\nLOCKED"
-	elif _open:
-		_label.text = "BRIG\nOPEN"
-	else:
-		_label.text = "BRIG"
+	_bar_mat.albedo_color = Color(0.9, 0.18, 0.14) if _locked else Color(0.85, 0.75, 0.35)
+	_bar_mat.emission_enabled = _locked
+	_bar_mat.emission = Color(0.9, 0.12, 0.08)
+	_bar_mat.emission_energy_multiplier = 1.2 if _locked else 0.0

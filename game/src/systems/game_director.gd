@@ -1,12 +1,7 @@
 extends Node
 
-const MED_STATION := preload("res://src/systems/med_station.gd")
-const VENDING := preload("res://src/systems/vending_machine.gd")
-const GALLEY := preload("res://src/systems/galley.gd")
 const CREW_MANAGER := preload("res://src/crew/crew_manager.gd")
 const RUN_MANAGER := preload("res://src/systems/run_manager.gd")
-const DOOR := preload("res://src/systems/door.gd")
-const BRIG := preload("res://src/systems/brig.gd")
 
 var _systems: Dictionary = {}
 var _water: MeshInstance3D
@@ -16,10 +11,9 @@ var _flicker_t := 0.0
 
 func _ready() -> void:
 	_bind_systems()
-	_build_stations()
-	_build_brig()
 	_build_ocean()
-	_build_bilge_water()
+	call_deferred("_bind_systems")
+	call_deferred("_build_bilge_water")
 	call_deferred("_build_crew")
 	call_deferred("_build_run")
 
@@ -35,7 +29,10 @@ func _update_power(delta: float) -> void:
 	if _sun == null:
 		return
 	var power := _systems.get("power") as ShipSystem
-	if power != null and power.is_failed():
+	var power_out := power != null and power.is_failed()
+	if not power_out:
+		power_out = _task_failed("breaker")
+	if power_out:
 		_flicker_t += delta
 		_sun.light_energy = 0.25 + absf(sin(_flicker_t * 9.0)) * 0.35
 	else:
@@ -46,8 +43,19 @@ func _update_bilge(delta: float) -> void:
 	if _water == null:
 		return
 	var pump := _systems.get("pump") as ShipSystem
-	var target := 0.95 if (pump != null and pump.is_failed()) else 0.08
+	var flooding := pump != null and pump.is_failed()
+	if not flooding:
+		flooding = _task_failed("leak")
+	var target := 0.95 if flooding else 0.08
 	_water.position.y = move_toward(_water.position.y, target, delta * 0.22)
+
+
+func _task_failed(kind: String) -> bool:
+	for n in get_tree().get_nodes_in_group("task_stations"):
+		var t := n as TaskStation
+		if t != null and t.task_kind == kind and t.is_failed():
+			return true
+	return false
 
 
 func _bind_systems() -> void:
@@ -56,73 +64,6 @@ func _bind_systems() -> void:
 		var s := n as ShipSystem
 		if s != null:
 			_systems[s.system_id] = s
-
-
-func _build_stations() -> void:
-	var med := MED_STATION.new() as MedStation
-	med.name = "MedStation"
-	med.position = Vector3(-15.5, 0.5, 0.0)
-	add_child(med)
-
-	var vend := VENDING.new() as VendingMachine
-	vend.name = "VendingMachine"
-	vend.position = Vector3(15.5, 1.0, 0.0)
-	add_child(vend)
-
-	var galley := GALLEY.new() as Galley
-	galley.name = "Galley"
-	galley.position = Vector3(-15.5, 0.5, -8.0)
-	add_child(galley)
-
-
-func _build_brig() -> void:
-	var brig := BRIG.new() as Brig
-	brig.name = "Brig"
-	brig.position = Vector3(0.0, 0.0, -18.2)
-	var wall_color := Color(0.32, 0.36, 0.42)
-	_add_wall(brig, Vector3(4.0, 2.5, 0.2), Vector3(0.0, 1.25, -1.5), wall_color)
-	_add_wall(brig, Vector3(0.2, 2.5, 3.0), Vector3(-2.0, 1.25, 0.0), wall_color)
-	_add_wall(brig, Vector3(0.2, 2.5, 3.0), Vector3(2.0, 1.25, 0.0), wall_color)
-	_add_wall(brig, Vector3(1.25, 2.5, 0.2), Vector3(-1.375, 1.25, 1.5), wall_color)
-	_add_wall(brig, Vector3(1.25, 2.5, 0.2), Vector3(1.375, 1.25, 1.5), wall_color)
-
-	var door := DOOR.new() as Door
-	door.name = "Door"
-	door.position = Vector3(-0.75, 0.0, 1.5)
-	brig.add_child(door)
-
-	var sign := Label3D.new()
-	sign.name = "BrigSign"
-	sign.position = Vector3(0.0, 3.0, 0.0)
-	sign.pixel_size = 0.01
-	sign.billboard = BaseMaterial3D.BILLBOARD_ENABLED
-	sign.no_depth_test = true
-	sign.font_size = 44
-	sign.text = "BRIG\nlock crew inside"
-	sign.modulate = Color(1.0, 0.9, 0.55)
-	brig.add_child(sign)
-	add_child(brig)
-
-
-func _add_wall(parent: Node3D, size: Vector3, pos: Vector3, color: Color) -> void:
-	var wall := StaticBody3D.new()
-	wall.position = pos
-	var shape := CollisionShape3D.new()
-	var box := BoxShape3D.new()
-	box.size = size
-	shape.shape = box
-	wall.add_child(shape)
-	var bm := BoxMesh.new()
-	bm.size = size
-	var mat := StandardMaterial3D.new()
-	mat.albedo_color = color
-	mat.roughness = 0.7
-	mat.metallic = 0.15
-	bm.material = mat
-	var mesh := MeshInstance3D.new()
-	mesh.mesh = bm
-	wall.add_child(mesh)
-	parent.add_child(wall)
 
 
 func _build_ocean() -> void:
@@ -141,14 +82,13 @@ func _build_ocean() -> void:
 
 
 func _build_bilge_water() -> void:
+	_bind_systems()
 	var water := MeshInstance3D.new()
 	water.name = "BilgeWater"
 	var pm := PlaneMesh.new()
-	pm.size = Vector2(14.0, 14.0)
+	pm.size = Vector2(13.0, 11.0)
 	water.mesh = pm
-	var pump := _systems.get("pump") as ShipSystem
-	var water_pos := pump.global_position if pump != null else Vector3(15.5, 0.0, 15.5)
-	water.position = Vector3(water_pos.x, 0.08, water_pos.z)
+	water.position = Vector3(-9.0, 0.08, -2.0)
 	var mat := StandardMaterial3D.new()
 	mat.albedo_color = Color(0.08, 0.2, 0.22, 0.72)
 	mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA

@@ -41,11 +41,10 @@ func _build() -> void:
 	cross.material_override = white
 	add_child(cross)
 
-	_label = Label3D.new()
+	_label = ProximityLabel.new()
 	_label.position = Vector3(0.0, size.y * 0.5 + 0.75, 0.0)
 	_label.pixel_size = 0.01
 	_label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
-	_label.no_depth_test = true
 	_label.font_size = 48
 	_label.text = "MED BAY\nE: heal / revive"
 	_label.modulate = Color(0.6, 1.0, 0.8)
