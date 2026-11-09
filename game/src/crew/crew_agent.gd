@@ -28,6 +28,10 @@ const ATTACK_RECOVER := 0.9
 @export var stun_time := 5.0
 @export var capture_guard_time := Vector2(10.0, 20.0)
 
+const PERCEIVE_INTERVAL := 0.12
+const AVOID_INTERVAL := 0.05
+const SEPARATION_INTERVAL := 0.1
+
 var state: State = State.IDLE
 var net_state: int = State.IDLE
 var _home := Vector3.ZERO
@@ -62,6 +66,16 @@ var _walk_t := 0.0
 var _visual_pos := Vector3.ZERO
 var _visual_basis := Basis.IDENTITY
 
+var _perceive_t := 0.0
+var _avoid_t := 0.0
+var _cached_avoid_dir := Vector3.ZERO
+var _sep_t := 0.0
+var _cached_separation := Vector3.ZERO
+var _los_query: PhysicsRayQueryParameters3D
+var _avoid_query: PhysicsRayQueryParameters3D
+var _floor_query: PhysicsRayQueryParameters3D
+var _cached_restricted: Array[Node] = []
+
 @onready var _model: Node3D = $Visual/Model
 @onready var _visual: Node3D = $Visual
 @onready var _label: Label3D = $StateLabel
@@ -82,6 +96,17 @@ func _ready() -> void:
 	add_to_group("crew")
 	if NoiseBus.noise_emitted.is_connected(_on_noise) == false:
 		NoiseBus.noise_emitted.connect(_on_noise)
+	_los_query = PhysicsRayQueryParameters3D.new()
+	_los_query.collision_mask = 1
+	_los_query.exclude = [self]
+	_avoid_query = PhysicsRayQueryParameters3D.new()
+	_avoid_query.collision_mask = 1
+	_avoid_query.exclude = [self]
+	_floor_query = PhysicsRayQueryParameters3D.new()
+	_floor_query.collision_mask = 1
+	_floor_query.exclude = [self]
+	_perceive_t = randf_range(0.0, PERCEIVE_INTERVAL)
+	_sep_t = randf_range(0.0, SEPARATION_INTERVAL)
 	_update_label()
 	_idle_t = randf_range(0.3, 2.0)
 
@@ -111,6 +136,13 @@ func _physics_process(delta: float) -> void:
 	_think_t = maxf(0.0, _think_t - delta)
 	_air_t = maxf(0.0, _air_t - delta)
 	_scan_t = maxf(0.0, _scan_t - delta)
+	_avoid_t = maxf(0.0, _avoid_t - delta)
+	_sep_t = maxf(0.0, _sep_t - delta)
+	_perceive_t = maxf(0.0, _perceive_t - delta)
+
+	if not _carried and state != State.AIRBORNE:
+		if absf(rotation.x) > 0.001 or absf(rotation.z) > 0.001:
+			snap_upright()
 
 	if state == State.AIRBORNE:
 		_airborne_step(delta)
@@ -124,11 +156,15 @@ func _physics_process(delta: float) -> void:
 			velocity.y -= GRAVITY * delta
 		move_and_slide()
 		if _stun_t <= 0.0:
+			snap_upright()
 			_set_state(State.PATROL)
 			_pick_patrol_point()
 		return
 
-	_perceive(delta)
+	if _perceive_t <= 0.0:
+		_perceive_t = PERCEIVE_INTERVAL
+		_perceive(delta)
+
 	_think(delta)
 	_tick_visuals(delta)
 	_check_offboard()
@@ -143,6 +179,7 @@ func _airborne_step(delta: float) -> void:
 		return
 	if is_on_floor() and _air_t <= 0.0:
 		velocity = Vector3.ZERO
+		snap_upright()
 		_set_state(State.STUNNED)
 		_stun_t = 3.0
 		NoiseBus.emit_noise(global_position, 1.1, self)
@@ -182,7 +219,9 @@ func _perceive(_delta: float) -> void:
 		var carrying: bool = best.has_method("is_carrying") and bool(best.is_carrying())
 		var captured: bool = best.has_method("is_captured") and bool(best.is_captured())
 		var restricted := false
-		for a in get_tree().get_nodes_in_group("restricted_areas"):
+		if _cached_restricted.is_empty():
+			_cached_restricted = get_tree().get_nodes_in_group("restricted_areas")
+		for a in _cached_restricted:
 			var area := a as RestrictedArea
 			if area != null and area.contains(best):
 				restricted = true
@@ -191,6 +230,11 @@ func _perceive(_delta: float) -> void:
 			_become_hostile(best)
 		elif state == State.HOSTILE:
 			_target = best
+		elif state == State.SUSPICIOUS and _haul_item == null:
+			if global_position.distance_to(best.global_position) < 7.0 and _has_los(best):
+				_face_toward(best.global_position, 0.5)
+				_idle_t = randf_range(1.5, 3.0)
+				_set_state(State.IDLE)
 
 	if (state == State.IDLE or state == State.PATROL) and _haul_item == null:
 		_scan_for_missing_loot()
@@ -238,14 +282,12 @@ func _become_hostile(target: Node3D) -> void:
 
 func _has_los(target: Node3D) -> bool:
 	var world := get_world_3d()
-	if world == null:
+	if world == null or target == null:
 		return true
-	var from := global_position + Vector3.UP * 1.5
-	var to := target.global_position + Vector3.UP * 1.2
-	var q := PhysicsRayQueryParameters3D.create(from, to)
-	q.exclude = [self]
-	q.collision_mask = 1
-	return world.direct_space_state.intersect_ray(q).is_empty()
+	_los_query.from = global_position + Vector3.UP * 1.5
+	_los_query.to = target.global_position + Vector3.UP * 1.2
+	_los_query.exclude = [self]
+	return world.direct_space_state.intersect_ray(_los_query).is_empty()
 
 func _on_noise(pos: Vector3, loudness: float, source: Node) -> void:
 	if state == State.GONE or state == State.CARRIED or state == State.STUNNED:
@@ -254,9 +296,13 @@ func _on_noise(pos: Vector3, loudness: float, source: Node) -> void:
 		return
 	if source is CrewAgent:
 		return
+	if loudness < 0.75:
+		return
 	if global_position.distance_to(pos) > hearing_range * loudness:
 		return
 	if state == State.HOSTILE:
+		return
+	if state == State.SUSPICIOUS and loudness < 1.2:
 		return
 	_become_suspicious(pos)
 
@@ -284,8 +330,13 @@ func _think(delta: float) -> void:
 				_haul_step(delta)
 				return
 			_suspicion_t -= delta
-			if _move_to(_investigate_pos, move_speed * 1.15, delta) or _suspicion_t <= 0.0:
-				_idle_t = randf_range(1.0, 2.0)
+			var to_investigate := _investigate_pos - global_position
+			to_investigate.y = 0.0
+			var arrived := to_investigate.length() < 2.0
+			if arrived or _move_to(_investigate_pos, move_speed * 1.15, delta) or _suspicion_t <= 0.0:
+				velocity.x = move_toward(velocity.x, 0.0, STOP_FRICTION * delta)
+				velocity.z = move_toward(velocity.z, 0.0, STOP_FRICTION * delta)
+				_idle_t = randf_range(1.5, 3.0)
 				_set_state(State.IDLE)
 		State.HOSTILE:
 			_hostile_step(delta)
@@ -317,7 +368,6 @@ func _hostile_step(delta: float) -> void:
 	var to := _target.global_position - global_position
 	to.y = 0.0
 	var dist := to.length()
-	var can_see := _has_los(_target)
 
 	if dist < attack_range + 1.2 and _target.has_method("is_stunned") and _target.is_stunned() \
 			and not _target.is_carrying() and not _target.is_captured() \
@@ -325,7 +375,7 @@ func _hostile_step(delta: float) -> void:
 		_begin_capture(_target)
 		return
 
-	if dist <= attack_range and can_see:
+	if dist <= attack_range and _has_los(_target):
 		velocity.x = move_toward(velocity.x, 0.0, STOP_FRICTION * delta)
 		velocity.z = move_toward(velocity.z, 0.0, STOP_FRICTION * delta)
 		_face_toward(_target.global_position, delta)
@@ -534,6 +584,9 @@ func _clamp_arena(p: Vector3) -> Vector3:
 
 
 func _separation() -> Vector3:
+	if _sep_t > 0.0:
+		return _cached_separation
+	_sep_t = SEPARATION_INTERVAL
 	var push := Vector3.ZERO
 	for n in get_tree().get_nodes_in_group("crew"):
 		var other := n as CrewAgent
@@ -545,28 +598,50 @@ func _separation() -> Vector3:
 		if d < 0.01 or d >= separation_radius:
 			continue
 		push += away / d * (1.0 - d / separation_radius)
+
+	if state != State.HOSTILE:
+		for p_node in get_tree().get_nodes_in_group("players"):
+			var player := p_node as Node3D
+			if player == null or not is_instance_valid(player):
+				continue
+			var away_player := global_position - player.global_position
+			away_player.y = 0.0
+			var pd := away_player.length()
+			if pd < 0.01 or pd >= 2.2:
+				continue
+			push += (away_player / pd) * (1.0 - pd / 2.2) * 2.5
+
+	_cached_separation = push
 	return push
 
 
 func _avoid(dir: Vector3) -> Vector3:
+	if _avoid_t > 0.0:
+		return _cached_avoid_dir
+	_avoid_t = AVOID_INTERVAL
 	var world := get_world_3d()
 	if world == null:
+		_cached_avoid_dir = dir
 		return dir
 	var origin := global_position + Vector3.UP * 0.9
 	var space := world.direct_space_state
+
+	_avoid_query.from = origin
+	_avoid_query.to = origin + dir * 1.1
+	_avoid_query.exclude = [self]
+	if space.intersect_ray(_avoid_query).is_empty():
+		_cached_avoid_dir = dir
+		return dir
+
 	for angle in [deg_to_rad(32.0), deg_to_rad(-32.0)]:
 		var probe := dir.rotated(Vector3.UP, angle)
-		var q := PhysicsRayQueryParameters3D.create(origin, origin + probe * 1.35)
-		q.exclude = [self]
-		q.collision_mask = 1
-		if space.intersect_ray(q).is_empty():
+		_avoid_query.to = origin + probe * 1.35
+		if space.intersect_ray(_avoid_query).is_empty():
+			_cached_avoid_dir = probe
 			return probe
-	var q2 := PhysicsRayQueryParameters3D.create(origin, origin + dir * 0.9)
-	q2.exclude = [self]
-	q2.collision_mask = 1
-	if space.intersect_ray(q2).is_empty():
-		return dir
-	return dir.rotated(Vector3.UP, deg_to_rad(70.0))
+
+	_cached_avoid_dir = dir.rotated(Vector3.UP, deg_to_rad(70.0))
+	return _cached_avoid_dir
 
 
 func _face_toward(pos: Vector3, delta: float) -> void:
@@ -612,9 +687,10 @@ func _pick_point_near(origin: Vector3, rmin: float, rmax: float) -> Vector3:
 	var p := _clamp_arena(origin + Vector3(cos(a) * r, 0.0, sin(a) * r))
 	var world := get_world_3d()
 	if world != null:
-		var q := PhysicsRayQueryParameters3D.create(p + Vector3.UP * 5.0, p + Vector3.DOWN * 8.0)
-		q.collision_mask = 1
-		var hit := world.direct_space_state.intersect_ray(q)
+		_floor_query.from = p + Vector3.UP * 5.0
+		_floor_query.to = p + Vector3.DOWN * 8.0
+		_floor_query.exclude = [self]
+		var hit := world.direct_space_state.intersect_ray(_floor_query)
 		if not hit.is_empty():
 			p.y = (hit["position"] as Vector3).y + 0.1
 			return p
@@ -711,6 +787,11 @@ func grab_by(peer_id: int) -> void:
 	set_net_authority(peer_id)
 
 
+func snap_upright() -> void:
+	rotation.x = 0.0
+	rotation.z = 0.0
+
+
 func release_from_carry(thrown: bool, impulse: Vector3) -> void:
 	_carried = false
 	_carrier_id = -1
@@ -720,6 +801,7 @@ func release_from_carry(thrown: bool, impulse: Vector3) -> void:
 	if _label != null:
 		_label.visible = true
 	set_net_authority(1)
+	snap_upright()
 	if thrown:
 		_set_state(State.AIRBORNE)
 		_air_t = 0.2
@@ -778,6 +860,7 @@ func _update_remote_visual(delta: float) -> void:
 		_visual_pos = target_pos
 		_visual_basis = target_basis
 	else:
+		target_basis = Basis(Vector3.UP, rotation.y)
 		var t := 1.0 - exp(-18.0 * delta)
 		_visual_pos = _visual_pos.lerp(target_pos, t)
 		_visual_basis = _visual_basis.slerp(target_basis, t).orthonormalized()

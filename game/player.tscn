@@ -72,4 +72,5 @@ target_position = Vector3(0, 0, -2.8)
 script = ExtResource("3_preview")
 
 [node name="MultiplayerSynchronizer" type="MultiplayerSynchronizer" parent="." unique_id=1269854612]
+delta_interval = 0.033
 replication_config = SubResource("SceneReplicationConfig_sync")

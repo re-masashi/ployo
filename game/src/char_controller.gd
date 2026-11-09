@@ -1109,6 +1109,8 @@ func _drop_crew() -> void:
 	carrying_loot = false
 	_anchor.position = Vector3(0.0, -0.15, -CARRY_CREW_DIST)
 	crew.global_position = _anchor.global_position
+	crew.rotation.x = 0.0
+	crew.rotation.z = 0.0
 	_server_or_direct_crew_release(crew, false, Vector3.ZERO)
 
 
@@ -1126,7 +1128,7 @@ func _throw_crew() -> void:
 
 func _server_or_direct_crew_release(crew: CrewAgent, thrown: bool, impulse: Vector3) -> void:
 	var pos := crew.global_position
-	var rot := crew.global_rotation
+	var rot := Vector3(0.0, crew.global_rotation.y, 0.0)
 	var releaser := _my_id()
 	if not multiplayer.has_multiplayer_peer() or multiplayer.is_server():
 		crew.global_transform = Transform3D(Basis.from_euler(rot), pos)
@@ -1147,6 +1149,8 @@ func server_crew_release(crew_path: String, thrown: bool, impulse: Vector3, pos:
 	if crew == null:
 		return
 	var sender := multiplayer.get_remote_sender_id()
+	rot.x = 0.0
+	rot.z = 0.0
 	crew.global_transform = Transform3D(Basis.from_euler(rot), pos)
 	crew.release_from_carry(thrown, impulse)
 	_remote_crew_release.rpc(crew_path, thrown, impulse, pos, rot, sender)
@@ -1159,6 +1163,8 @@ func _remote_crew_release(crew_path: String, thrown: bool, impulse: Vector3, pos
 	var crew := get_node_or_null(crew_path) as CrewAgent
 	if crew == null:
 		return
+	rot.x = 0.0
+	rot.z = 0.0
 	crew.global_transform = Transform3D(Basis.from_euler(rot), pos)
 	crew.release_from_carry(thrown, impulse)
 

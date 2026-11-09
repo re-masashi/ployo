@@ -44,4 +44,5 @@ text = "Crew"
 font_size = 48
 
 [node name="MultiplayerSynchronizer" type="MultiplayerSynchronizer" parent="." unique_id=497746246]
+delta_interval = 0.05
 replication_config = SubResource("SceneReplicationConfig_crew")

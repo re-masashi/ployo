@@ -45,4 +45,5 @@ shape = SubResource("CylinderShape_vase")
 mesh = SubResource("CylinderMesh_vase")
 
 [node name="MultiplayerSynchronizer" type="MultiplayerSynchronizer" parent="." unique_id=1903092213]
+delta_interval = 0.05
 replication_config = SubResource("SceneReplicationConfig_vase")
