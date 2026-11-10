@@ -136,7 +136,7 @@ func _build_systems() -> void:
 	_systems = Node3D.new()
 	_systems.name = "Systems"
 	add_child(_systems)
-	_add_system("engine", "ENGINE", Vector3(-9.0, 0.8, -23.0), Color(0.85, 0.35, 0.2), 300.0, true)
+	_add_system("engine", "ENGINE", Vector3(-9.0, 0.8, -23.0), Color(0.85, 0.35, 0.2), 300.0, true, _engine_procedure())
 	_add_system("power", "POWER", Vector3(9.0, 0.8, -23.0), Color(0.95, 0.8, 0.2), 320.0, true)
 	_add_system("fuel", "FUEL", Vector3(-9.0, 0.8, -2.0), Color(0.8, 0.3, 0.55), 340.0, true)
 	_add_system("pump", "BILGE PUMP", Vector3(-13.0, 0.8, 1.0), Color(0.25, 0.55, 0.8), 280.0, false)
@@ -336,7 +336,7 @@ func _add_light(pos: Vector3, color: Color) -> void:
 	add_child(light)
 
 
-func _add_system(id: String, title: String, pos: Vector3, color: Color, fail_after: float, critical: bool) -> void:
+func _add_system(id: String, title: String, pos: Vector3, color: Color, fail_after: float, critical: bool, procedure: Array = []) -> void:
 	var system := ShipSystem.new()
 	system.system_id = id
 	system.display_name = title
@@ -345,6 +345,8 @@ func _add_system(id: String, title: String, pos: Vector3, color: Color, fail_aft
 	system.fail_after = fail_after
 	system.critical = critical
 	_systems.add_child(system)
+	if not procedure.is_empty():
+		_attach_procedure(system, procedure)
 
 
 func _add_task(kind: String, title: String, pos: Vector3, color: Color, hold: float) -> void:
@@ -394,3 +396,96 @@ func _add_loot(scene: PackedScene, pos: Vector3) -> void:
 	var item := scene.instantiate() as Node3D
 	item.position = pos
 	_loot.add_child(item)
+
+
+func _engine_procedure() -> Array:
+	# stage is like {"kind":"seq"|"set","actions":[...]}.
+	# seq = actions must be done in fixed order.
+	# set = actions can be done in any order.
+	var stages := []
+	stages.append(_stage("seq", [
+		_make_action("close_coolant", "Close Coolant Valve", 2.0, "Turn the coolant valve clockwise"),
+		_make_action("close_fuel", "Close Fuel Valve", 2.0, "Shut the fuel valve"),
+		_make_action("trip_breaker", "Trip Breaker", 2.0, "Flip the breaker to OFF"),
+	]))
+	stages.append(_stage("seq", [
+		_make_action("open_engine", "Open Engine", 3.0, "Crack the engine housing",
+			["close_coolant", "close_fuel", "trip_breaker"], true,
+			"You opened a pressurized engine - scalding steam!", true),
+	]))
+	stages.append(_stage("set", [
+		_make_action("clean", "Clean Internals", 2.5, "Wipe out grime", ["open_engine"]),
+		_make_action("add_oil", "Add Oil", 2.0, "Pour oil into the crankcase", ["open_engine"]),
+		_make_action("add_fuel", "Add Fuel", 2.0, "Refill the fuel line", ["open_engine"]),
+	]))
+	stages.append(_stage("seq", [
+		_make_action("close_engine", "Close Engine", 2.0, "Seal the housing",
+			["clean", "add_oil", "add_fuel"]),
+	]))
+	stages.append(_stage("set", [
+		_make_action("open_coolant", "Open Coolant Valve", 1.5, "Reopen coolant flow",
+			["close_engine"], true, "You opened coolant with the engine still open - flooding!", true),
+		_make_action("open_breaker", "Reset Breaker", 1.5, "Flip the breaker back ON", ["close_engine"]),
+	]))
+	stages.append(_stage("seq", [
+		_make_action("start_engine", "Start Engine", 3.0, "Turn the ignition",
+			["open_coolant", "open_breaker"], true,
+			"You started the engine without coolant - it seized!", true),
+	]))
+	return stages
+
+
+func _stage(kind: String, actions: Array) -> Dictionary:
+	return {"kind": kind, "actions": actions}
+
+
+func _make_action(id: String, display: String, hold: float, hint: String,
+                  requires: Array[String] = [],
+                  accident_on_unguarded_begin: bool = false,
+                  accident_reason: String = "Mistake made.",
+                  accident_on_fail: bool = false) -> Dictionary:
+	return {
+		"id": id,
+		"display_name": display,
+		"hold_time": hold,
+		"hint": hint,
+		"requires": requires,
+		"accident_on_unguarded_begin": accident_on_unguarded_begin,
+		"accident_reason": accident_reason,
+		"accident_on_fail": accident_on_fail,
+	}
+
+
+func _attach_procedure(system: ShipSystem, stages: Array) -> void:
+	var proc := Procedure.new()
+	proc.name = "RepairProcedure"
+	for s in stages:
+		var kind := s["kind"] as String
+		var stage
+		if kind == "set":
+			stage = ActionSet.new()
+			stage.name = "StageSet"
+		else:
+			stage = Sequence.new()
+			stage.name = "StageSeq"
+		var action_nodes: Array = []
+		for a in s["actions"] as Array:
+			var action := Action.new()
+			action.id = a["id"] as String
+			action.display_name = a["display_name"] as String
+			action.hold_time = a["hold_time"] as float
+			action.hint = a["hint"] as String
+			action.requires = a["requires"] as Array[String]
+			action.accident_on_unguarded_begin = a["accident_on_unguarded_begin"] as bool
+			action.accident_reason = a["accident_reason"] as String
+			action.accident_on_fail = a["accident_on_fail"] as bool
+			action.name = a["id"] as String
+			stage.add_child(action)
+			action_nodes.append(action)
+		stage.actions = action_nodes
+		proc.add_child(stage)
+		proc.stages.append(stage)
+	system.add_child(proc)
+	proc._reindex()
+	system.procedure_node = proc.get_path()
+	system._bind_procedure()

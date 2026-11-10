@@ -14,6 +14,7 @@ enum SState { OK, FAILED }
 @export var size := Vector3(1.3, 1.5, 0.9)
 @export var accent := Color(0.9, 0.5, 0.15)
 @export var start_failed := false
+@export var procedure_node: NodePath = ""
 
 var state: SState = SState.OK
 var _fail_t := 0.0
@@ -27,6 +28,9 @@ var _last_sync := 0.0
 var _state_sync_t := 0.0
 var _fail_flash_t := 0.0
 var _synced_label := ""
+var _synced_hold := ""
+var _procedure: Procedure = null
+var _procedure_active: bool = false
 
 
 func _ready() -> void:
@@ -36,7 +40,36 @@ func _ready() -> void:
 	if start_failed:
 		state = SState.FAILED
 	_refresh_local()
+	_bind_procedure()
 
+
+func _bind_procedure() -> void:
+	if procedure_node.is_empty():
+		return
+	var node := get_node_or_null(procedure_node)
+	if node is Procedure:
+		_procedure = node
+		_procedure.succeeded.connect(_on_procedure_done)
+		_procedure.failed.connect(_on_procedure_failed)
+
+
+func _on_procedure_done(proc: Procedure) -> void:
+	if not _server():
+		return
+	if _repairer == null:
+		return
+	_repair()
+
+
+func _on_procedure_failed(proc: Procedure, reason: String) -> void:
+	if is_instance_valid(_repairer) and _repairer.has_method("take_hit"):
+		_repairer.take_hit(25.0)
+	_repairer = null
+	_procedure_active = false
+	_progress = 0.0
+	_fail_flash_t = 1.4
+	_broadcast()
+	print("[Ship] %s repair accident: %s" % [display_name, reason])
 
 func _server() -> bool:
 	return not multiplayer.has_multiplayer_peer() or multiplayer.is_server()
@@ -108,6 +141,9 @@ func _physics_process(delta: float) -> void:
 	if not _repairer_valid():
 		_cancel_repair()
 		return
+	if _procedure_active and _procedure != null:
+		_drive_procedure(delta)
+		return
 	_progress += delta
 	_sync_progress()
 	if _progress >= repair_time:
@@ -122,6 +158,36 @@ func _repairer_valid() -> bool:
 	if _repairer.has_method("is_carrying") and _repairer.is_carrying():
 		return false
 	return global_position.distance_to(_repairer.global_position) < 3.2
+
+
+func _drive_procedure(delta: float) -> void:
+	if _procedure == null or _repairer == null:
+		return
+	if _procedure.is_failed():
+		_cancel_repair()
+		return
+	var actor := _repairer as Node3D
+	while true:
+		var action := _procedure.current_action()
+		if action == null:
+			_repair()
+			return
+		if action.state != TaskBase.State.ACTIVE:
+			var res := action.begin_checked()
+			if res == TaskBase.BeginResult.BLOCKED:
+				_cancel_repair()
+				return
+			if res == TaskBase.BeginResult.ACCIDENT:
+				return
+		if action.hold(actor, delta):
+			# Action completed; the procedure advanced via its signal. If the
+			# whole procedure is done, _on_procedure_done already repaired us.
+			if _repairer == null:
+				return
+			continue
+		_progress = clampf(_procedure.progress(), 0.0, 1.0) * repair_time
+		_sync_progress()
+		return
 
 
 func _fail() -> void:
@@ -171,14 +237,23 @@ func interact_hold(_player: Node3D, _delta: float) -> void:
 
 
 func wants_hold() -> bool:
-	return state == SState.FAILED
+	if state != SState.FAILED:
+		return false
+	# After an accident the hold ends and you have to press E to retry.
+	return _procedure == null or not _procedure.is_failed()
 
 
 func hold_progress() -> float:
+	if _procedure_active and _procedure != null:
+		return clampf(_procedure.progress(), 0.0, 1.0)
 	return clampf(_progress / maxf(repair_time, 0.01), 0.0, 1.0)
 
 
 func hold_text() -> String:
+	if not _server() and not _synced_hold.is_empty():
+		return _synced_hold
+	if _procedure_active and _procedure != null:
+		return "%s - %s" % [display_name, _procedure.active_text()]
 	return "%s - HOLD E" % display_name
 
 
@@ -203,6 +278,12 @@ func _stop_repair(player: Node3D, failed: bool) -> void:
 	if _repairer != player:
 		return
 	var had_progress := _progress > 0.01
+	if _procedure_active:
+		var cur := _procedure.current_action()
+		if cur != null:
+			had_progress = had_progress or cur.progress() > 0.01
+		_procedure_active = false
+		_procedure.cancel_current(failed and had_progress)
 	_repairer = null
 	_progress = 0.0
 	if failed and had_progress:
@@ -230,6 +311,13 @@ func _start_repair(player: Node3D) -> void:
 	_repairer = player
 	_progress = 0.0
 	_fail_flash_t = 0.0
+	if _procedure != null:
+		if _procedure.is_done() or _procedure.is_failed():
+			_procedure.reset_all()
+		_procedure_active = true
+		var first := _procedure.current_action()
+		if first != null:
+			first.begin_checked()
 	_broadcast()
 
 
@@ -250,16 +338,17 @@ func _sync_progress() -> void:
 
 func _broadcast() -> void:
 	if multiplayer.has_multiplayer_peer() and multiplayer.is_server():
-		_sync_visuals.rpc(state == SState.FAILED, _progress, _label_text())
+		_sync_visuals.rpc(state == SState.FAILED, _progress, _label_text(), hold_text())
 	else:
 		_refresh_local()
 
 
 @rpc("any_peer", "call_local", "reliable")
-func _sync_visuals(is_failed_now: bool, progress: float, text: String) -> void:
+func _sync_visuals(is_failed_now: bool, progress: float, text: String, hold_txt: String) -> void:
 	state = SState.FAILED if is_failed_now else SState.OK
 	_progress = progress
 	_synced_label = text
+	_synced_hold = hold_txt
 	_refresh_local()
 
 
@@ -271,7 +360,12 @@ func _label_text() -> String:
 	if _fail_flash_t > 0.0:
 		return "%s\nREPAIR FAILED" % display_name
 	if _repairer != null:
-		return "%s\nHOLD E  %d%%" % [display_name, int(100.0 * _progress / maxf(repair_time, 0.01))]
+		var doing := "HOLD E"
+		if _procedure_active and _procedure != null:
+			var cur := _procedure.current_action()
+			if cur != null:
+				doing = cur.display_name
+		return "%s\n%s  %d%%" % [display_name, doing, int(100.0 * hold_progress())]
 	return "%s\nFAILED - HOLD E" % display_name
 
 
