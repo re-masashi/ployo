@@ -1,0 +1,13 @@
+[gd_scene format=3 uid="uid://gsiy2firow6e"]
+
+[ext_resource type="Script" uid="uid://b443vky0yfe3p" path="res://src/procgen/room_generator.gd" id="1_f0h75"]
+[ext_resource type="Material" uid="uid://b6kl28tys01ul" path="res://materials/kenney_prototype-textures/Orange/texture_01.tres" id="2_kle8h"]
+[ext_resource type="Material" uid="uid://c2rtrt0ho7wvg" path="res://materials/kenney_prototype-textures/Green/texture_09.tres" id="3_fp5v7"]
+[ext_resource type="Material" uid="uid://620h7d78t8mk" path="res://materials/kenney_prototype-textures/Purple/texture_01.tres" id="4_jrobd"]
+
+[node name="Awawa" type="Node3D" unique_id=184992941]
+script = ExtResource("1_f0h75")
+seed = 12
+end_material = ExtResource("2_kle8h")
+stair_material = ExtResource("3_fp5v7")
+stairend_material = ExtResource("4_jrobd")
