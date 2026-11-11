@@ -1,4 +1,5 @@
-extends Node3D
+extends Node
+class_name RoomGenerator
 
 @export var width := 7
 @export var height := 7
@@ -6,36 +7,41 @@ extends Node3D
 @export var num_rooms := 10
 @export var num_dead_ends := 3
 @export var num_extra_stairs := 1
-@export var seed := 38754289753
 @export var door_scene: PackedScene
-
-@export var end_material: Material
-@export var stair_material: Material
-@export var stairend_material: Material
 @export var all_rooms: Array[RoomData]
-
-@onready var mesh = BoxMesh.new()
-
-var num_rooms_by_type: Dictionary[RoomData, int] = {}
 
 const dirs = [Vector2i.UP, Vector2i.DOWN, Vector2i.LEFT, Vector2i.RIGHT]
 const door_wall_names := ["DoorWallUp", "DoorWallDown", "DoorWallLeft", "DoorWallRight"]
 const door_wall_names_btm := ["DoorWallUpBottom", "DoorWallDownBottom", "DoorWallLeftBottom", "DoorWallRightBottom"]
 const place_door_dirs = [Vector2i.RIGHT, Vector2i.DOWN]
+# number of space between floors. Rooms are actually 14x14 and 3 tall, but there's 1 unit of space inbetween every floor, so 4.
+const room_height := 4
+const room_size := 14
+const half_room_size := float(room_size) / 2
 
 var levels = make_levels()
+var num_rooms_by_type: Dictionary[RoomData, int] = {}
 
-func _ready() -> void:
-	mesh.size = Vector3(.9, .9, .9)
-	
-	while !gen_all_levels(seed):
-		seed += 50
-		push_warning("failed to generate a level")
-	instantiate_rooms()
+func gen_levels(max_attempts: int, node: Node3D, initial_seed: int) -> bool:
+	var rng = RandomNumberGenerator.new()
+	rng.seed = initial_seed
+	while max_attempts > 0 and !gen_all_levels(rng):
+		initial_seed += 50
+		push_warning("failed to generate a level for seed ", initial_seed)
+		max_attempts -= 1
+		rng.seed = initial_seed
+	if max_attempts == 0:
+		num_rooms_by_type.clear()
+		levels.clear()
+		return false
+	instantiate_rooms(node)
+	num_rooms_by_type.clear()
+	levels.clear()
+	return true
 
-func instantiate_rooms():
+func instantiate_rooms(parent: Node3D):
 	for n in level_count:
-		var y_3d = -n * 4
+		var y_3d = -n * room_height
 		var lvl = levels[n]
 		for x in width:
 			for y in height:
@@ -46,31 +52,38 @@ func instantiate_rooms():
 					if new_pos.x >= width or new_pos.y >= height: continue
 					if lvl[new_pos.x + new_pos.y * width] == null: continue
 					var door: Door = door_scene.instantiate()
-					door.position.x = 14 * new_pos.x - 7 * dir.x
+					door.position.x = room_size * new_pos.x - half_room_size * dir.x
 					door.position.y = y_3d
-					door.position.z = 14 * new_pos.y - 7 * dir.y
+					door.position.z = room_size * new_pos.y - half_room_size * dir.y
 					if dir.x > 0: door.rotation.y = deg_to_rad(90)
-					add_child(door)
+					parent.add_child(door)
 				if !is_instance_of(v, RoomPlacement): continue
 				var placement: RoomPlacement = v
 				if placement.data.scene == null: continue
 				var scene: Node3D = placement.data.scene.instantiate()
 				placement.scene = scene
-				scene.position = Vector3(x * 14, y_3d, y * 14)
+				scene.position = Vector3(x * room_size, y_3d, y * room_size)
 				scene.rotation.y = deg_to_rad(placement.rotation)
-				add_child(scene)
+				parent.add_child(scene)
 				var children = scene.get_children()
 				for i in 4:
+					var node_id = children.find_custom(func(nod) -> bool: return nod.name == door_wall_names[i])
+					var node = null if node_id == -1 else children[node_id]
 					if placement.closed_sides[i]:
-						var node_id = children.find_custom(func(nod) -> bool: return nod.name == door_wall_names[i])
-						var node = null if node_id == -1 else children[node_id]
 						if node != null and is_instance_of(node, Node3D): node.visible = true
 						else: push_warning("couldn't close ", door_wall_names[i], " for room at x", y, ", y", y, " l", n, " node=", node)
-					if placement.data.type == RoomData.RoomType.Stairs and placement.closed_sides_bottom[i]:
-						var node_id = children.find_custom(func(nod) -> bool: return nod.name == door_wall_names_btm[i])
-						var node = null if node_id == -1 else children[node_id]
-						if node != null and is_instance_of(node, Node3D): node.visible = true
-						else: push_warning("couldn't close ", door_wall_names_btm[i], " for room at x", y, ", y", y, " l", n)
+					elif node != null:
+						scene.remove_child(node)
+						node.queue_free()
+					if placement.data.type == RoomData.RoomType.Stairs:
+						var btm_node_id = children.find_custom(func(nod) -> bool: return nod.name == door_wall_names_btm[i])
+						var btm_node = null if btm_node_id == -1 else children[btm_node_id]
+						if placement.closed_sides_bottom[i]:
+							if btm_node != null and is_instance_of(btm_node, Node3D): btm_node.visible = true
+							else: push_warning("couldn't close ", door_wall_names_btm[i], " for room at x", y, ", y", y, " l", n)
+						elif btm_node != null:
+							scene.remove_child(btm_node)
+							btm_node.queue_free()
 
 func make_levels():
 	var lvls = []
@@ -79,9 +92,7 @@ func make_levels():
 		lvls[i].resize(width * height)
 	return lvls
 
-func gen_all_levels(rng_seed: int) -> bool:
-	var rng = RandomNumberGenerator.new()
-	rng.seed = rng_seed
+func gen_all_levels(rng: RandomNumberGenerator) -> bool:
 	levels = make_levels()
 	num_rooms_by_type = {}
 	@warning_ignore("integer_division")

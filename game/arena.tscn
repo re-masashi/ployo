@@ -4,6 +4,15 @@
 [ext_resource type="Script" uid="uid://cahiscadube5x" path="res://src/net_manager.gd" id="2_net"]
 [ext_resource type="Script" uid="uid://c5c8kpyopmq0m" path="res://src/systems/game_director.gd" id="3_director"]
 [ext_resource type="Script" uid="uid://d1ej38v1hsnex" path="res://src/systems/arena_builder.gd" id="4_builder"]
+[ext_resource type="Script" uid="uid://b443vky0yfe3p" path="res://src/procgen/room_generator.gd" id="5_fu4bq"]
+[ext_resource type="PackedScene" uid="uid://c4ucdadam1f06" path="res://src/door.tscn" id="6_sbb53"]
+[ext_resource type="Script" uid="uid://c6lcbpivjg1go" path="res://src/procgen/room_data.gd" id="7_nb1nt"]
+[ext_resource type="Resource" uid="uid://cwoskm32wbk22" path="res://src/procgen/rooms/corner.tres" id="8_u834y"]
+[ext_resource type="Resource" uid="uid://gwkn2ih7imjp" path="res://src/procgen/rooms/deadend.tres" id="9_w3v2p"]
+[ext_resource type="Resource" uid="uid://cobubeulg3pvq" path="res://src/procgen/rooms/fourway.tres" id="10_1s3fb"]
+[ext_resource type="Resource" uid="uid://bfdjs6ain5ofq" path="res://src/procgen/rooms/hallway.tres" id="11_1pekq"]
+[ext_resource type="Resource" uid="uid://cu3jswtte71ei" path="res://src/procgen/rooms/stairs.tres" id="12_ffcej"]
+[ext_resource type="Resource" uid="uid://cbvxph37w5ccg" path="res://src/procgen/rooms/threeway.tres" id="13_3vubs"]
 
 [sub_resource type="PanoramaSkyMaterial" id="PanoramaSkyMaterial_arena"]
 panorama = ExtResource("1_sky")
@@ -27,6 +36,7 @@ transform = Transform3D(0.819152, -0.40558, 0.40558, 0, 0.707107, 0.707107, -0.5
 shadow_enabled = true
 
 [node name="ArenaBuilder" type="Node3D" parent="." unique_id=237266739]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 100, 0)
 script = ExtResource("4_builder")
 
 [node name="Players" type="Node3D" parent="." unique_id=1580193348]
@@ -41,22 +51,22 @@ script = ExtResource("2_net")
 [node name="SpawnPoints" type="Node3D" parent="." unique_id=1640338479]
 
 [node name="Spawn1" type="Marker3D" parent="SpawnPoints" unique_id=1650201503 groups=["spawn_points"]]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.2, 27)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 42, 0.5, 56)
 
 [node name="Spawn2" type="Marker3D" parent="SpawnPoints" unique_id=455735866 groups=["spawn_points"]]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -3, 1.2, 26)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 42, 0.5, 56)
 
 [node name="Spawn3" type="Marker3D" parent="SpawnPoints" unique_id=589109257 groups=["spawn_points"]]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 3, 1.2, 26)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 42, 0.5, 56)
 
 [node name="Spawn4" type="Marker3D" parent="SpawnPoints" unique_id=459091070 groups=["spawn_points"]]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.2, 0)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 42, 0.5, 56)
 
 [node name="Spawn5" type="Marker3D" parent="SpawnPoints" unique_id=1165120098 groups=["spawn_points"]]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -1, 1.2, 10)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 42, 0.5, 56)
 
 [node name="Spawn6" type="Marker3D" parent="SpawnPoints" unique_id=960396406 groups=["spawn_points"]]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1, 1.2, -10)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 42, 0.5, 56)
 
 [node name="Crew" type="Node3D" parent="." unique_id=1200610089]
 
@@ -86,3 +96,13 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -12, 1.1, 16)
 
 [node name="GameDirector" type="Node" parent="." unique_id=1176835644]
 script = ExtResource("3_director")
+
+[node name="RoomGenerator" type="Node" parent="." unique_id=851375504]
+unique_name_in_owner = true
+script = ExtResource("5_fu4bq")
+door_scene = ExtResource("6_sbb53")
+all_rooms = Array[ExtResource("7_nb1nt")]([ExtResource("8_u834y"), ExtResource("9_w3v2p"), ExtResource("10_1s3fb"), ExtResource("11_1pekq"), ExtResource("12_ffcej"), ExtResource("13_3vubs")])
+metadata/_custom_type_script = "uid://b443vky0yfe3p"
+
+[node name="Level" type="Node3D" parent="." unique_id=1201205971]
+unique_name_in_owner = true

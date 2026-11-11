@@ -15,6 +15,7 @@ var _open_angle: float
 var _close_angle: float
 
 func _ready() -> void:
+	translate(Vector3(-.75, 0, 0))
 	add_to_group("doors")
 	sync_to_physics = true
 	_open_angle = rotation.y + open_angle

@@ -12,12 +12,16 @@ var _dump_t := 0.0
 
 var _ip_edit: LineEdit
 var _port_edit: LineEdit
+var _seed_edit: LineEdit
 var _status: Label
 var _roster: Label
 
 @onready var _players: Node3D = get_parent().get_node("Players")
 @onready var _spawns: Node3D = get_parent().get_node("SpawnPoints")
 
+var map_seed: int = 0
+@onready var level: Node3D = %Level
+@onready var generator: RoomGenerator = %RoomGenerator
 
 func _ready() -> void:
 	multiplayer.peer_connected.connect(_on_peer_connected)
@@ -87,6 +91,11 @@ func _build_ui() -> void:
 	_port_edit.custom_minimum_size = Vector2(70, 0)
 	_port_edit.tooltip_text = "Port"
 	row.add_child(_port_edit)
+	_seed_edit = LineEdit.new()
+	_seed_edit.text = "3849757349875"
+	_seed_edit.custom_minimum_size = Vector2(70, 0)
+	_seed_edit.tooltip_text = "Seed"
+	row.add_child(_seed_edit)
 
 	var btns := HBoxContainer.new()
 	btns.add_theme_constant_override("separation", 6)
@@ -121,6 +130,16 @@ func _on_host_pressed() -> void:
 	if _peer != null:
 		_set_status("Already in a session. Leave first.")
 		return
+	
+	var lvl_children = level.get_children()
+	for c in lvl_children:
+		level.remove_child(c)
+		c.queue_free()
+	map_seed = _get_seed(_seed_edit.text)
+	if !generator.gen_levels(1, level, map_seed):
+		_set_status("Failed to generate a map for the seed")
+		return
+
 	_peer = ENetMultiplayerPeer.new()
 	var err := _peer.create_server(_port(), MAX_PLAYERS)
 	if err != OK:
@@ -133,6 +152,10 @@ func _on_host_pressed() -> void:
 	_set_status("Hosting on port %d. (LAN IP in terminal: ip addr)" % _port())
 	_refresh_roster()
 
+func _get_seed(text: String) -> int:
+	if text.is_empty(): return randi()
+	if text.is_valid_int(): return int(text)
+	return hash(text)
 
 func _on_join_pressed() -> void:
 	if _peer != null:
@@ -165,6 +188,10 @@ func _clear_session() -> void:
 	_peer = null
 	for c in _players.get_children():
 		_players.remove_child(c)
+		c.queue_free()
+	var lvl_children = level.get_children()
+	for c in lvl_children:
+		level.remove_child(c)
 		c.queue_free()
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 	_refresh_roster()
@@ -231,9 +258,21 @@ func _spawn_player(peer_id: int) -> void:
 	p.set_multiplayer_authority(peer_id)
 	p.position = PLAYER_SCRIPT.spawn_position_for(peer_id, _spawns.get_children())
 	_players.add_child(p, true)
+	if peer_id > 1:
+		_spawn_map.rpc_id(peer_id, map_seed)
 	print("[Net] spawned player ", peer_id, " at ", p.position)
 	_refresh_roster()
 
+@rpc("authority")
+func _spawn_map(remote_seed: int):
+	map_seed = remote_seed
+	var lvl_children = level.get_children()
+	for c in lvl_children:
+		level.remove_child(c)
+		c.queue_free()
+	if !generator.gen_levels(1, level, map_seed):
+		_set_status("Failed to generate a map for the seed")
+		return
 
 func _despawn_player(peer_id: int) -> void:
 	var n := _players.get_node_or_null(str(peer_id))
