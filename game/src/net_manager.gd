@@ -51,6 +51,9 @@ func _process(delta: float) -> void:
 
 func _handle_cmdline_args() -> void:
 	var args := OS.get_cmdline_user_args()
+	if "--seed" in args:
+		var i := args.find("--seed")
+		if i + 1 < args.size(): _seed_edit.text = args[i + 1]
 	if "--host" in args:
 		var i := args.find("--host")
 		if i + 1 < args.size() and args[i + 1].is_valid_int():

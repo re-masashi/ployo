@@ -51,22 +51,22 @@ script = ExtResource("2_net")
 [node name="SpawnPoints" type="Node3D" parent="." unique_id=1640338479]
 
 [node name="Spawn1" type="Marker3D" parent="SpawnPoints" unique_id=1650201503 groups=["spawn_points"]]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 42, 0.5, 56)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 42, 0.5, 84)
 
 [node name="Spawn2" type="Marker3D" parent="SpawnPoints" unique_id=455735866 groups=["spawn_points"]]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 42, 0.5, 56)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 42, 0.5, 84)
 
 [node name="Spawn3" type="Marker3D" parent="SpawnPoints" unique_id=589109257 groups=["spawn_points"]]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 42, 0.5, 56)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 42, 0.5, 84)
 
 [node name="Spawn4" type="Marker3D" parent="SpawnPoints" unique_id=459091070 groups=["spawn_points"]]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 42, 0.5, 56)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 42, 0.5, 84)
 
 [node name="Spawn5" type="Marker3D" parent="SpawnPoints" unique_id=1165120098 groups=["spawn_points"]]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 42, 0.5, 56)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 42, 0.5, 84)
 
 [node name="Spawn6" type="Marker3D" parent="SpawnPoints" unique_id=960396406 groups=["spawn_points"]]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 42, 0.5, 56)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 42, 0.5, 84)
 
 [node name="Crew" type="Node3D" parent="." unique_id=1200610089]
 
