@@ -1,0 +1,11 @@
+[gd_resource type="Resource" script_class="RoomData" format=3 uid="uid://cbvxph37w5ccg"]
+
+[ext_resource type="Script" uid="uid://c6lcbpivjg1go" path="res://src/procgen/room_data.gd" id="1_q32qh"]
+[ext_resource type="PackedScene" uid="uid://oxbarfkjmrob" path="res://src/procgen/scenes/ThreewayRoomScene.tscn" id="1_y8c64"]
+
+[resource]
+script = ExtResource("1_q32qh")
+name = &"threeway"
+type = 5
+scene = ExtResource("1_y8c64")
+metadata/_custom_type_script = "uid://c6lcbpivjg1go"

@@ -1,0 +1,9 @@
+[gd_resource type="Resource" script_class="RoomData" format=3 uid="uid://d0ibgh4iosq33"]
+
+[ext_resource type="Script" uid="uid://c6lcbpivjg1go" path="res://src/procgen/room_data.gd" id="1_j46h8"]
+
+[resource]
+script = ExtResource("1_j46h8")
+name = &"brig"
+type = 2
+metadata/_custom_type_script = "uid://c6lcbpivjg1go"

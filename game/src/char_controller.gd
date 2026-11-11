@@ -174,7 +174,6 @@ func _enter_tree() -> void:
 		set_multiplayer_authority(id)
 		$MultiplayerSynchronizer.set_multiplayer_authority(id)
 
-
 func _ready() -> void:
 	var oid := get_multiplayer_authority()
 	player_name = "Player%d" % oid

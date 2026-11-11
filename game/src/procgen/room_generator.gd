@@ -7,44 +7,70 @@ extends Node3D
 @export var num_dead_ends := 3
 @export var num_extra_stairs := 1
 @export var seed := 38754289753
+@export var door_scene: PackedScene
 
 @export var end_material: Material
 @export var stair_material: Material
 @export var stairend_material: Material
+@export var all_rooms: Array[RoomData]
 
 @onready var mesh = BoxMesh.new()
 
+var num_rooms_by_type: Dictionary[RoomData, int] = {}
+
 const dirs = [Vector2i.UP, Vector2i.DOWN, Vector2i.LEFT, Vector2i.RIGHT]
+const door_wall_names := ["DoorWallUp", "DoorWallDown", "DoorWallLeft", "DoorWallRight"]
+const door_wall_names_btm := ["DoorWallUpBottom", "DoorWallDownBottom", "DoorWallLeftBottom", "DoorWallRightBottom"]
+const place_door_dirs = [Vector2i.RIGHT, Vector2i.DOWN]
+
 var levels = make_levels()
 
 func _ready() -> void:
 	mesh.size = Vector3(.9, .9, .9)
 	
 	while !gen_all_levels(seed):
+		seed += 50
 		push_warning("failed to generate a level")
+	instantiate_rooms()
+
+func instantiate_rooms():
 	for n in level_count:
+		var y_3d = -n * 4
 		var lvl = levels[n]
-		print("Level ", n, ":")
-		for y in height:
-			var s = ""
-			for x in width:
-				if lvl[y * width + x] != null:
-					var mesh_inst := MeshInstance3D.new()
-					mesh_inst.mesh = mesh
-					mesh_inst.position = Vector3(x, -n, y)
-					match lvl[y * width + x]:
-						&"end": mesh_inst.material_override = end_material
-						&"stair": mesh_inst.material_override = stair_material
-						&"stairend": mesh_inst.material_override = stairend_material
-					add_child(mesh_inst)
-				match lvl[y * width + x]:
-					&"end": s += "e"
-					&"stair": s += "s"
-					&"stairend": s += "S"
-					&"normal": s += "x"
-					_: s += " "
-			print(s)
-		print("")
+		for x in width:
+			for y in height:
+				var v = lvl[x + y * width]
+				if v == null: continue
+				for dir in place_door_dirs:
+					var new_pos = Vector2i(x + dir.x, y + dir.y)
+					if new_pos.x >= width or new_pos.y >= height: continue
+					if lvl[new_pos.x + new_pos.y * width] == null: continue
+					var door: Door = door_scene.instantiate()
+					door.position.x = 14 * new_pos.x - 7 * dir.x
+					door.position.y = y_3d
+					door.position.z = 14 * new_pos.y - 7 * dir.y
+					if dir.x > 0: door.rotation.y = deg_to_rad(90)
+					add_child(door)
+				if !is_instance_of(v, RoomPlacement): continue
+				var placement: RoomPlacement = v
+				if placement.data.scene == null: continue
+				var scene: Node3D = placement.data.scene.instantiate()
+				placement.scene = scene
+				scene.position = Vector3(x * 14, y_3d, y * 14)
+				scene.rotation.y = deg_to_rad(placement.rotation)
+				add_child(scene)
+				var children = scene.get_children()
+				for i in 4:
+					if placement.closed_sides[i]:
+						var node_id = children.find_custom(func(nod) -> bool: return nod.name == door_wall_names[i])
+						var node = null if node_id == -1 else children[node_id]
+						if node != null and is_instance_of(node, Node3D): node.visible = true
+						else: push_warning("couldn't close ", door_wall_names[i], " for room at x", y, ", y", y, " l", n, " node=", node)
+					if placement.data.type == RoomData.RoomType.Stairs and placement.closed_sides_bottom[i]:
+						var node_id = children.find_custom(func(nod) -> bool: return nod.name == door_wall_names_btm[i])
+						var node = null if node_id == -1 else children[node_id]
+						if node != null and is_instance_of(node, Node3D): node.visible = true
+						else: push_warning("couldn't close ", door_wall_names_btm[i], " for room at x", y, ", y", y, " l", n)
 
 func make_levels():
 	var lvls = []
@@ -57,6 +83,7 @@ func gen_all_levels(rng_seed: int) -> bool:
 	var rng = RandomNumberGenerator.new()
 	rng.seed = rng_seed
 	levels = make_levels()
+	num_rooms_by_type = {}
 	@warning_ignore("integer_division")
 	var start_pos = Vector2i((width - 1) / 2, height - 1)
 	var start_dir = Vector2i.UP
@@ -86,7 +113,81 @@ func gen_all_levels(rng_seed: int) -> bool:
 		start_dir = determine_next_dir(first_stair_room, Vector2i(-10, -10), rng)
 	for i in stair_rooms.size():
 		place_stairs(i, stair_rooms[i], num_extra_stairs)
+	for i in level_count: place_rooms(i, rng)
 	return true
+
+func place_rooms(n: int, rng: RandomNumberGenerator):
+	var lvl = levels[n]
+	for x in width:
+		for y in height:
+			var v = lvl[x + y * width]
+			if v == null || is_instance_of(v, RoomPlacement): continue
+			var rooms: Array[RoomData] = []
+			var preferred_room_type = rooms_for_pos(n, x, y, rooms)
+			if rooms.is_empty(): continue
+			var max_prob = 0.0
+			for room in rooms:
+				var mul = 1.0 if room.type == preferred_room_type else 0.8
+				match room.probabilities.size():
+					0: max_prob += mul
+					1: max_prob += mul * room.probabilities[0]
+					_: max_prob += mul * room.probabilities[n]
+			var prob = rng.randf_range(0.0, max_prob - 0.1)
+			var selected_room = null
+			for room in rooms:
+				var my_prob = 1.0 if room.type == preferred_room_type else 0.8
+				match room.probabilities.size():
+					0: pass
+					1: prob *= room.probabilities[0]
+					_: prob *= room.probabilities[n]
+				if prob - my_prob <= 0.0:
+					selected_room = room
+					break
+				else: prob -= my_prob
+			if selected_room == null: selected_room = rooms.back()
+			var placement = RoomPlacement.new()
+			if num_rooms_by_type.has(selected_room): num_rooms_by_type[selected_room] += 1
+			else: num_rooms_by_type[selected_room] = 1
+			placement.data = selected_room
+			placement.rotation = rotate_room(lvl, x, y, selected_room, rng)
+			var sides_with_doors: int = RoomData.ty_to_doors(selected_room.type) >> (placement.rotation / 90)
+			var doors = (sides_with_doors & 0xf) & (doorways_at(lvl, x, y) ^ 0xf)
+			var sides_with_closed_doors: int = (doors | (doors << 4)) >> (4 - (placement.rotation / 90))
+			placement.closed_sides.push_back(bool(sides_with_closed_doors & 0b1000))
+			placement.closed_sides.push_back(bool(sides_with_closed_doors & 0b0010))
+			placement.closed_sides.push_back(bool(sides_with_closed_doors & 0b0100))
+			placement.closed_sides.push_back(bool(sides_with_closed_doors & 0b0001))
+			if selected_room.type == RoomData.RoomType.Stairs:
+				var btm_sides_with_doors: int = RoomData.ty_to_doors(selected_room.type) >> (placement.rotation / 90)
+				doors = (btm_sides_with_doors & 0xf) & (doorways_at(levels[n + 1], x, y) ^ 0xf)
+				var btm_sides_with_closed_doors: int = (doors | (doors << 4)) >> (4 - (placement.rotation / 90))
+				placement.closed_sides_bottom.push_back(bool(btm_sides_with_closed_doors & 0b1000))
+				placement.closed_sides_bottom.push_back(bool(btm_sides_with_closed_doors & 0b0010))
+				placement.closed_sides_bottom.push_back(bool(btm_sides_with_closed_doors & 0b0100))
+				placement.closed_sides_bottom.push_back(bool(btm_sides_with_closed_doors & 0b0001))
+			lvl[x + y * width] = placement
+
+func doorways_at(lvl: Array, x: int, y: int) -> int:
+	var i = 0
+	if y > 0 && lvl[x + (y - 1) * width] != null: i |= 0b1000
+	if y + 1 < height && lvl[x + (y + 1) * width] != null: i |= 0b0010
+	if x > 0 && lvl[x - 1 + y * width] != null: i |= 0b0100
+	if x + 1 < width && lvl[x + 1 + y * width] != null: i |= 0b0001
+	return i
+
+func rotate_room(lvl: Array, x: int, y: int, room: RoomData, rng: RandomNumberGenerator) -> int:
+	var i = doorways_at(lvl, x, y)
+	var valid_rots: Array[int] = []
+	var i_room = RoomData.ty_to_doors(room.type)
+	for j in 4:
+		if i | i_room == i_room: valid_rots.push_back(j * 90)
+		i_room >>= 1
+	if valid_rots.is_empty():
+		push_error("no valid rotations ", i, " ", i_room)
+		return 0
+	var v = valid_rots[rng.randi_range(0, valid_rots.size() - 1)]
+	if v < 0: return 360 - v
+	return v
 
 func place_stairs(upper: int, last: Vector2i, extra_stairs: int):
 	var lvlup = levels[upper]
@@ -101,7 +202,7 @@ func place_stairs(upper: int, last: Vector2i, extra_stairs: int):
 				if may_be_stair(lvlup[i]) && may_be_stair(lvldown[i]):
 					stairs.push_back(Vector2i(x, y))
 	if stairs.is_empty():
-		push_warning("no available stair locations")
+		push_warning("no available stair locations for level ", upper, " to ", upper + 1)
 	extra_stairs = min(extra_stairs, stairs.size())
 	for _i in extra_stairs:
 		var last_i = 0
@@ -189,3 +290,63 @@ func determine_next_dir(pos: Vector2i, cur_dir: Vector2i, rng: RandomNumberGener
 	if v.x < 0 || v.y < 0 || v.x >= width || v.y >= width:
 		return Vector2i(-dir.x, -dir.y)
 	return dir
+
+### Returns the preferred room type
+func rooms_for_pos(n: int, x: int, y: int, rooms: Array[RoomData]) -> RoomData.RoomType:
+	var lvl = levels[n]
+	var preferred_room_type := RoomData.RoomType.Fourway
+	if lvl[x + y * width] == &"stair": preferred_room_type = RoomData.RoomType.Stairs
+	elif lvl[x + y * width] == &"stairend": return RoomData.RoomType.Stairs
+	else:
+		var doors: Array[Vector2i] = []
+		for dir in dirs:
+			var pos = Vector2i(x + dir.x, y + dir.y)
+			if pos.x < 0 || pos.y < 0 || pos.x >= width || pos.y >= width: continue
+			if lvl[pos.x + pos.y * width] == null: continue
+			doors.push_back(dir)
+		preferred_room_type = preferred_type(doors)
+	for room in all_rooms:
+		if !compatible(preferred_room_type, room.type): continue
+		if room.maximum_count > 0 && num_rooms_by_type.has(room) && num_rooms_by_type[room] >= room.maximum_count: continue
+		if room.probabilities.size() > 1 and room.probabilities[n] <= 0: continue
+		if room.cannot_border_tag.is_empty():
+			rooms.push_back(room)
+			continue
+		var is_valid = true
+		for dir in dirs:
+			var pos = Vector2i(x + dir.x, y + dir.y)
+			if pos.x < 0 || pos.y < 0 || pos.x >= width || pos.y >= width: continue
+			var v = lvl[pos.x + pos.y * width]
+			if v == null || !is_instance_of(v, RoomData) || (v as RoomData).tag.is_empty(): continue
+			if room.cannot_border_tag.has((v as RoomData).tag):
+				is_valid = false
+				break
+		if !is_valid: continue
+		rooms.push_back(room)
+	
+	return preferred_room_type
+
+func compatible(a: RoomData.RoomType, b: RoomData.RoomType) -> bool:
+	if b == RoomData.RoomType.Stairs: return a == b
+	match a:
+		RoomData.RoomType.DeadEnd: return b != RoomData.RoomType.Hallway and b != RoomData.RoomType.Corner
+		RoomData.RoomType.Hallway: return b != RoomData.RoomType.DeadEnd and b != RoomData.RoomType.Corner
+		RoomData.RoomType.Corner: return b != RoomData.RoomType.Hallway and b != RoomData.RoomType.DeadEnd
+		RoomData.RoomType.Threeway: return b == RoomData.RoomType.Threeway or b == RoomData.RoomType.Fourway
+		RoomData.RoomType.Fourway: return b == RoomData.RoomType.Fourway
+		RoomData.RoomType.Stairs: return b == RoomData.RoomType.Stairs
+		_:
+			push_error("unknown roomtype ", b)
+			return false
+
+func preferred_type(doors: Array[Vector2i]) -> RoomData.RoomType:
+	match doors.size():
+		1: return RoomData.RoomType.DeadEnd
+		2:
+			if doors[0].x == -doors[1].x and doors[0].y == -doors[1].y: return RoomData.RoomType.Hallway
+			else: return RoomData.RoomType.Corner
+		3: return RoomData.RoomType.Threeway
+		4: return RoomData.RoomType.Fourway
+		_: 
+			push_error("room with ", doors.size(), " doors")
+			return RoomData.RoomType.Fourway

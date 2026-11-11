@@ -1,0 +1,11 @@
+[gd_resource type="Resource" script_class="RoomData" format=3 uid="uid://cwoskm32wbk22"]
+
+[ext_resource type="PackedScene" uid="uid://dj6voktm4rflp" path="res://src/procgen/scenes/CornerRoomScene.tscn" id="1_6tfei"]
+[ext_resource type="Script" uid="uid://c6lcbpivjg1go" path="res://src/procgen/room_data.gd" id="1_i2b0t"]
+
+[resource]
+script = ExtResource("1_i2b0t")
+name = &"corner"
+type = 4
+scene = ExtResource("1_6tfei")
+metadata/_custom_type_script = "uid://c6lcbpivjg1go"

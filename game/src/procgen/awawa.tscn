@@ -1,13 +1,39 @@
 [gd_scene format=3 uid="uid://gsiy2firow6e"]
 
 [ext_resource type="Script" uid="uid://b443vky0yfe3p" path="res://src/procgen/room_generator.gd" id="1_f0h75"]
+[ext_resource type="PackedScene" uid="uid://c4ucdadam1f06" path="res://src/door.tscn" id="2_dlcra"]
 [ext_resource type="Material" uid="uid://b6kl28tys01ul" path="res://materials/kenney_prototype-textures/Orange/texture_01.tres" id="2_kle8h"]
 [ext_resource type="Material" uid="uid://c2rtrt0ho7wvg" path="res://materials/kenney_prototype-textures/Green/texture_09.tres" id="3_fp5v7"]
 [ext_resource type="Material" uid="uid://620h7d78t8mk" path="res://materials/kenney_prototype-textures/Purple/texture_01.tres" id="4_jrobd"]
+[ext_resource type="Script" uid="uid://c6lcbpivjg1go" path="res://src/procgen/room_data.gd" id="5_p1kxh"]
+[ext_resource type="Resource" uid="uid://cwoskm32wbk22" path="res://src/procgen/rooms/corner.tres" id="6_dlcra"]
+[ext_resource type="Resource" uid="uid://gwkn2ih7imjp" path="res://src/procgen/rooms/deadend.tres" id="7_pi8ct"]
+[ext_resource type="Resource" uid="uid://cobubeulg3pvq" path="res://src/procgen/rooms/fourway.tres" id="8_oykvn"]
+[ext_resource type="Resource" uid="uid://bfdjs6ain5ofq" path="res://src/procgen/rooms/hallway.tres" id="9_pcloo"]
+[ext_resource type="Resource" uid="uid://cu3jswtte71ei" path="res://src/procgen/rooms/stairs.tres" id="10_c2711"]
+[ext_resource type="Resource" uid="uid://cbvxph37w5ccg" path="res://src/procgen/rooms/threeway.tres" id="11_ycnp0"]
+
+[sub_resource type="ProceduralSkyMaterial" id="ProceduralSkyMaterial_dlcra"]
+sky_horizon_color = Color(0.66224277, 0.6717428, 0.6867428, 1)
+ground_horizon_color = Color(0.66224277, 0.6717428, 0.6867428, 1)
+energy_multiplier = 1.05
+
+[sub_resource type="Sky" id="Sky_pi8ct"]
+sky_material = SubResource("ProceduralSkyMaterial_dlcra")
+
+[sub_resource type="Environment" id="Environment_oykvn"]
+background_mode = 2
+sky = SubResource("Sky_pi8ct")
+glow_enabled = true
 
 [node name="Awawa" type="Node3D" unique_id=184992941]
 script = ExtResource("1_f0h75")
 seed = 12
+door_scene = ExtResource("2_dlcra")
 end_material = ExtResource("2_kle8h")
 stair_material = ExtResource("3_fp5v7")
 stairend_material = ExtResource("4_jrobd")
+all_rooms = Array[ExtResource("5_p1kxh")]([ExtResource("6_dlcra"), ExtResource("7_pi8ct"), ExtResource("8_oykvn"), ExtResource("9_pcloo"), ExtResource("10_c2711"), ExtResource("11_ycnp0")])
+
+[node name="WorldEnvironment" type="WorldEnvironment" parent="." unique_id=1292188508]
+environment = SubResource("Environment_oykvn")

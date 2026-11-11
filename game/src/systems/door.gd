@@ -1,54 +1,24 @@
 class_name Door
 extends AnimatableBody3D
 
-@export var size := Vector3(1.5, 2.2, 0.12)
-@export var accent := Color(0.45, 0.5, 0.58)
 @export var open_angle := -1.45
 @export var lockable := false
+@export var locked_material: StandardMaterial3D
+
+@onready var _bar: MeshInstance3D = %bar
 
 var _open := false
 var _locked := false
 var _tween: Tween
-var _bar_mat: StandardMaterial3D
 
+var _open_angle: float
+var _close_angle: float
 
 func _ready() -> void:
 	add_to_group("doors")
 	sync_to_physics = true
-	_build()
-
-
-func _build() -> void:
-	var shape := CollisionShape3D.new()
-	var box := BoxShape3D.new()
-	box.size = size
-	shape.shape = box
-	shape.position = Vector3(size.x * 0.5, size.y * 0.5, 0.0)
-	add_child(shape)
-
-	var bm := BoxMesh.new()
-	bm.size = size
-	var mat := StandardMaterial3D.new()
-	mat.albedo_color = accent
-	mat.roughness = 0.6
-	mat.metallic = 0.25
-	bm.material = mat
-	var mesh := MeshInstance3D.new()
-	mesh.mesh = bm
-	mesh.position = shape.position
-	add_child(mesh)
-
-	var bar := MeshInstance3D.new()
-	var bar_mesh := BoxMesh.new()
-	bar_mesh.size = Vector3(size.x * 0.7, 0.08, 0.05)
-	bar.mesh = bar_mesh
-	bar.position = shape.position + Vector3(0.0, 0.0, size.z * 0.5 + 0.03)
-	_bar_mat = StandardMaterial3D.new()
-	_bar_mat.albedo_color = Color(0.85, 0.75, 0.35)
-	_bar_mat.metallic = 0.6
-	bar.material_override = _bar_mat
-	add_child(bar)
-
+	_open_angle = rotation.y + open_angle
+	_close_angle = rotation.y
 
 func is_open() -> bool:
 	return _open
@@ -119,14 +89,10 @@ func _set_open(open: bool) -> void:
 		_tween.kill()
 	_tween = create_tween()
 	_tween.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
-	_tween.tween_property(self, "rotation:y", open_angle if open else 0.0, 0.28)
+	_tween.tween_property(self, "rotation:y", _open_angle if open else _close_angle, 0.28)
 
 
 
 func _refresh_lock_visual() -> void:
-	if _bar_mat == null or not lockable:
-		return
-	_bar_mat.albedo_color = Color(0.9, 0.18, 0.14) if _locked else Color(0.85, 0.75, 0.35)
-	_bar_mat.emission_enabled = _locked
-	_bar_mat.emission = Color(0.9, 0.12, 0.08)
-	_bar_mat.emission_energy_multiplier = 1.2 if _locked else 0.0
+	if not lockable: return
+	_bar.material_override = locked_material if _locked else null

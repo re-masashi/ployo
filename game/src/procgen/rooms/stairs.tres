@@ -1,0 +1,11 @@
+[gd_resource type="Resource" script_class="RoomData" format=3 uid="uid://cu3jswtte71ei"]
+
+[ext_resource type="PackedScene" uid="uid://cber6hpu74v5g" path="res://src/procgen/scenes/StairScene.tscn" id="1_hp3sj"]
+[ext_resource type="Script" uid="uid://c6lcbpivjg1go" path="res://src/procgen/room_data.gd" id="1_o8xjk"]
+
+[resource]
+script = ExtResource("1_o8xjk")
+name = &"stairs"
+type = 1
+scene = ExtResource("1_hp3sj")
+metadata/_custom_type_script = "uid://c6lcbpivjg1go"

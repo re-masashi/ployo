@@ -1,0 +1,11 @@
+[gd_resource type="Resource" script_class="RoomData" format=3 uid="uid://gwkn2ih7imjp"]
+
+[ext_resource type="PackedScene" uid="uid://b6xsemckoy2q4" path="res://src/procgen/scenes/DeadEndScene.tscn" id="1_ha4gd"]
+[ext_resource type="Script" uid="uid://c6lcbpivjg1go" path="res://src/procgen/room_data.gd" id="1_w8old"]
+
+[resource]
+script = ExtResource("1_w8old")
+name = &"deadend"
+type = 2
+scene = ExtResource("1_ha4gd")
+metadata/_custom_type_script = "uid://c6lcbpivjg1go"
