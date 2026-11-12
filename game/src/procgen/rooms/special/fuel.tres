@@ -1,0 +1,11 @@
+[gd_resource type="Resource" script_class="RoomData" format=3 uid="uid://cts15p5s7mfxt"]
+
+[ext_resource type="Script" uid="uid://c6lcbpivjg1go" path="res://src/procgen/room_data.gd" id="1_mqbgu"]
+
+[resource]
+script = ExtResource("1_mqbgu")
+maximum_count = 1
+tag = &"industrial"
+name = &"fuel"
+type = 4
+metadata/_custom_type_script = "uid://c6lcbpivjg1go"

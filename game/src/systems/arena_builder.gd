@@ -189,7 +189,7 @@ func _build_brig() -> void:
 	brig.name = "Brig"
 	brig.position = Vector3(-9.0, 0.0, 8.0)
 
-	var door := Door.new()
+	var door := DoorDeprecated.new()
 	door.name = "Door"
 	door.position = Vector3(7.0, 0.0, -0.75)
 	door.rotation.y = -PI * 0.5
@@ -306,7 +306,7 @@ func _add_box(node_name: String, center: Vector3, size: Vector3, color: Color, m
 
 
 func _add_door_at(x: float, z: float) -> void:
-	var door := Door.new()
+	var door := DoorDeprecated.new()
 	door.position = Vector3(x, 0.0, z - 0.75)
 	door.rotation.y = -PI * 0.5
 	door.open_angle = 1.45 if x > 0.0 else -1.45

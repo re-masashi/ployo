@@ -1,0 +1,49 @@
+[gd_scene format=3 uid="uid://c4ucdadam1f06"]
+
+[ext_resource type="Script" uid="uid://6m8d7ya564cw" path="res://src/systems/door.gd" id="1_dmdg3"]
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_dmdg3"]
+albedo_color = Color(0.9019608, 0.18039216, 0.14117648, 1)
+metallic = 0.6
+emission_enabled = true
+emission = Color(0.9019608, 0.12156863, 0.078431375, 1)
+emission_energy_multiplier = 1.2
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_6mibh"]
+size = Vector3(1.5, 2.2, 0.12)
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_ohu0e"]
+albedo_color = Color(0.4509804, 0.5019608, 0.5803922, 1)
+metallic = 0.25
+roughness = 0.6
+
+[sub_resource type="BoxMesh" id="BoxMesh_6mibh"]
+material = SubResource("StandardMaterial3D_ohu0e")
+size = Vector3(1.5, 2.2, 0.12)
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_wov8v"]
+albedo_color = Color(0.8509804, 0.7490196, 0.34901962, 1)
+metallic = 0.6
+
+[sub_resource type="BoxMesh" id="BoxMesh_ohu0e"]
+material = SubResource("StandardMaterial3D_wov8v")
+size = Vector3(1.05, 0.08, 0.05)
+
+[node name="Door" type="AnimatableBody3D" unique_id=2016959312]
+script = ExtResource("1_dmdg3")
+open_angle = 1.45
+locked_material = SubResource("StandardMaterial3D_dmdg3")
+metadata/_custom_type_script = "uid://6m8d7ya564cw"
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="." unique_id=587435662]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.75, 1.1, 0)
+shape = SubResource("BoxShape3D_6mibh")
+
+[node name="frame" type="MeshInstance3D" parent="." unique_id=1970010081]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.75, 1.1, 0)
+mesh = SubResource("BoxMesh_6mibh")
+
+[node name="bar" type="MeshInstance3D" parent="." unique_id=1105909967]
+unique_name_in_owner = true
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.75, 1.1, 0.09)
+mesh = SubResource("BoxMesh_ohu0e")

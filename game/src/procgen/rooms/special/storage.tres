@@ -1,0 +1,8 @@
+[gd_resource type="Resource" script_class="RoomData" format=3 uid="uid://dexvw2hb4hbgc"]
+
+[ext_resource type="Script" uid="uid://c6lcbpivjg1go" path="res://src/procgen/room_data.gd" id="1_1bt3n"]
+
+[resource]
+script = ExtResource("1_1bt3n")
+name = &"storage"
+metadata/_custom_type_script = "uid://c6lcbpivjg1go"
