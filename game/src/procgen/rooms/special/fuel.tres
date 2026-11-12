@@ -1,5 +1,6 @@
 [gd_resource type="Resource" script_class="RoomData" format=3 uid="uid://cts15p5s7mfxt"]
 
+[ext_resource type="PackedScene" uid="uid://dj6voktm4rflp" path="res://src/procgen/scenes/CornerRoomScene.tscn" id="1_520g6"]
 [ext_resource type="Script" uid="uid://c6lcbpivjg1go" path="res://src/procgen/room_data.gd" id="1_mqbgu"]
 
 [resource]
@@ -8,4 +9,5 @@ maximum_count = 1
 tag = &"industrial"
 name = &"fuel"
 type = 4
+scene = ExtResource("1_520g6")
 metadata/_custom_type_script = "uid://c6lcbpivjg1go"

@@ -1,6 +1,7 @@
 [gd_resource type="Resource" script_class="RoomData" format=3 uid="uid://d176bqncc2u8n"]
 
 [ext_resource type="Script" uid="uid://c6lcbpivjg1go" path="res://src/procgen/room_data.gd" id="1_kw8ik"]
+[ext_resource type="PackedScene" uid="uid://oxbarfkjmrob" path="res://src/procgen/scenes/ThreewayRoomScene.tscn" id="1_qufg3"]
 
 [resource]
 script = ExtResource("1_kw8ik")
@@ -9,4 +10,5 @@ tag = &"commons"
 cannot_border_tag = Array[StringName]([&"industrial"])
 name = &"galley"
 type = 5
+scene = ExtResource("1_qufg3")
 metadata/_custom_type_script = "uid://c6lcbpivjg1go"
