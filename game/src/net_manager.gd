@@ -16,8 +16,8 @@ var _seed_edit: LineEdit
 var _status: Label
 var _roster: Label
 
-@onready var _players: Node3D = get_parent().get_node("Players")
-@onready var _spawns: Node3D = get_parent().get_node("SpawnPoints")
+@onready var _players: Node3D = %Players
+@onready var _spawns: Node3D = %SpawnPoints
 
 var map_seed: int = 0
 @onready var level: Node3D = %Level
@@ -139,7 +139,8 @@ func _on_host_pressed() -> void:
 		level.remove_child(c)
 		c.queue_free()
 	map_seed = _get_seed(_seed_edit.text)
-	if !generator.gen_levels(1, level, map_seed):
+	map_seed = generator.gen_levels(50, level, map_seed)
+	if map_seed == -1:
 		_set_status("Failed to generate a map for the seed")
 		return
 

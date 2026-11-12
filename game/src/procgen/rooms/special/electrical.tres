@@ -1,5 +1,6 @@
 [gd_resource type="Resource" script_class="RoomData" format=3 uid="uid://cxhenhkx3h3el"]
 
+[ext_resource type="PackedScene" uid="uid://bc4e8n71xv1xw" path="res://src/procgen/scenes/HallwayScene.tscn" id="1_npghi"]
 [ext_resource type="Script" uid="uid://c6lcbpivjg1go" path="res://src/procgen/room_data.gd" id="1_s8tub"]
 
 [resource]
@@ -8,4 +9,5 @@ maximum_count = 1
 tag = &"industrial"
 name = &"electrical"
 type = 3
+scene = ExtResource("1_npghi")
 metadata/_custom_type_script = "uid://c6lcbpivjg1go"

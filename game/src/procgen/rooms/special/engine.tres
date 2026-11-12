@@ -1,6 +1,7 @@
 [gd_resource type="Resource" script_class="RoomData" format=3 uid="uid://dvdwychia8cwc"]
 
 [ext_resource type="Script" uid="uid://c6lcbpivjg1go" path="res://src/procgen/room_data.gd" id="1_hvoog"]
+[ext_resource type="PackedScene" uid="uid://oxbarfkjmrob" path="res://src/procgen/scenes/ThreewayRoomScene.tscn" id="1_wrol2"]
 
 [resource]
 script = ExtResource("1_hvoog")
@@ -8,4 +9,5 @@ maximum_count = 1
 tag = &"industrial"
 name = &"engine"
 type = 5
+scene = ExtResource("1_wrol2")
 metadata/_custom_type_script = "uid://c6lcbpivjg1go"

@@ -10,6 +10,15 @@ class_name RoomGenerator
 @export var door_scene: PackedScene
 @export var all_rooms: Array[RoomData]
 
+@export var bilge: RoomData
+@export var brig: RoomData
+@export var electrical: RoomData
+@export var engine: RoomData
+@export var fuel: RoomData
+@export var galley: RoomData
+@export var medbay: RoomData
+@export var storage: RoomData
+
 const dirs = [Vector2i.UP, Vector2i.DOWN, Vector2i.LEFT, Vector2i.RIGHT]
 const door_wall_names := ["DoorWallUp", "DoorWallDown", "DoorWallLeft", "DoorWallRight"]
 const door_wall_names_btm := ["DoorWallUpBottom", "DoorWallDownBottom", "DoorWallLeftBottom", "DoorWallRightBottom"]
@@ -22,7 +31,7 @@ const half_room_size := float(room_size) / 2
 var levels = make_levels()
 var num_rooms_by_type: Dictionary[RoomData, int] = {}
 
-func gen_levels(max_attempts: int, node: Node3D, initial_seed: int) -> bool:
+func gen_levels(max_attempts: int, node: Node3D, initial_seed: int) -> int:
 	var rng = RandomNumberGenerator.new()
 	rng.seed = initial_seed
 	while max_attempts > 0 and !gen_all_levels(rng):
@@ -33,11 +42,11 @@ func gen_levels(max_attempts: int, node: Node3D, initial_seed: int) -> bool:
 	if max_attempts == 0:
 		num_rooms_by_type.clear()
 		levels.clear()
-		return false
+		return -1
 	instantiate_rooms(node)
 	num_rooms_by_type.clear()
 	levels.clear()
-	return true
+	return initial_seed
 
 func instantiate_rooms(parent: Node3D):
 	for n in level_count:
@@ -124,15 +133,86 @@ func gen_all_levels(rng: RandomNumberGenerator) -> bool:
 		start_dir = determine_next_dir(first_stair_room, Vector2i(-10, -10), rng)
 	for i in stair_rooms.size():
 		place_stairs(i, stair_rooms[i], num_extra_stairs)
+	if !place_needed_rooms(rng): return false
+	for i in level_count: select_rooms(i, rng)
 	for i in level_count: place_rooms(i, rng)
 	return true
 
-func place_rooms(n: int, rng: RandomNumberGenerator):
+func room_types(tys: Array):
+	for n in level_count:
+		var lvl = []
+		tys.push_back(lvl)
+		var real_lvl = levels[n]
+		for x in width:
+			for y in height:
+				if real_lvl[x + y * width] == null: lvl.push_back(null)
+				else:  lvl.push_back(room_type_at(real_lvl, x, y))
+
+func compatible_room_types(tys: Array, lvl: Array, data: RoomData) -> int:
+	var i = 0
+	for idx in tys.size():
+		if tys[idx] == null: continue
+		@warning_ignore("integer_division")
+		if compatible(tys[idx], data.type) and not has_forbidden_neighbors(lvl, idx % width, idx / width, data):
+			i += 1
+	return i
+
+func place_room_pos(lvl: Array, room: RoomData, rng: RandomNumberGenerator) -> bool:
+	var spots: Array[int] = []
+	for x in width:
+		for y in height:
+			var i = x + y * width
+			if lvl[i] == null || is_instance_of(lvl[i], RoomData): continue
+			var rty = room_type_at(lvl, x, y)
+			if rty == RoomData.RoomType.Stairs: continue
+			if !compatible(rty, room.type): continue
+			if has_forbidden_neighbors(lvl, x, y, room): continue
+			spots.push_back(i)
+	if spots.is_empty(): return false
+	lvl[spots[rng.randi_range(0, spots.size() - 1)]] = room
+	return true
+
+func place_needed_rooms(rng: RandomNumberGenerator) -> bool:
+	# bilge
+	if bilge != null:
+		if !place_room_pos(levels.back(), bilge, rng): return false
+	# galley
+	if galley != null:
+		var n = rng.rand_weighted(PackedFloat32Array([1, 0.71, 0.42, 0.14, 0.02]))
+		if !place_room_pos(levels[n], galley, rng): return false
+	# medbay
+	if medbay != null:
+		var n = rng.rand_weighted(PackedFloat32Array([1, 0.76, 0.61, 0.3, 0.15]))
+		if !place_room_pos(levels[n], medbay, rng): return false
+	# engine
+	if engine != null:
+		var n = rng.rand_weighted(PackedFloat32Array([0.5, 0.8, 1.0, 0.3, 0.1]))
+		if !place_room_pos(levels[n], engine, rng): return false
+	# electrical
+	if electrical != null:
+		var n = rng.rand_weighted(PackedFloat32Array([0.8, 1.0, 0.5]))
+		if !place_room_pos(levels[n], electrical, rng): return false
+	# fuel
+	if fuel != null:
+		var n = rng.rand_weighted(PackedFloat32Array([0.3, 0.5, 0.7, 1.0, 0.9]))
+		if !place_room_pos(levels[n], fuel, rng): return false
+	# storage
+	if storage != null:
+		var n = rng.rand_weighted(PackedFloat32Array([1, 0.9, 0.7, 0.4, 0.1]))
+		if !place_room_pos(levels[n], storage, rng): return false
+	# brig
+	if brig != null:
+		var n = rng.randi_range(0, 4)
+		if !place_room_pos(levels[n], brig, rng): return false
+	
+	return true
+
+func select_rooms(n: int, rng: RandomNumberGenerator):
 	var lvl = levels[n]
 	for x in width:
 		for y in height:
 			var v = lvl[x + y * width]
-			if v == null || is_instance_of(v, RoomPlacement): continue
+			if v == null || is_instance_of(v, RoomData): continue
 			var rooms: Array[RoomData] = []
 			var preferred_room_type = rooms_for_pos(n, x, y, rooms)
 			if rooms.is_empty(): continue
@@ -156,6 +236,17 @@ func place_rooms(n: int, rng: RandomNumberGenerator):
 					break
 				else: prob -= my_prob
 			if selected_room == null: selected_room = rooms.back()
+			lvl[x + y * width] = selected_room
+
+# TODO: separate placement and selection out so that selection happens randomly after the places for
+# pre-determined required special rooms have been selected, so that the rest of placement doesn't have to be duplicated.
+func place_rooms(n: int, rng: RandomNumberGenerator):
+	var lvl = levels[n]
+	for x in width:
+		for y in height:
+			var v = lvl[x + y * width]
+			if v == null || !is_instance_of(v, RoomData): continue
+			var selected_room: RoomData = v
 			var placement = RoomPlacement.new()
 			if num_rooms_by_type.has(selected_room): num_rooms_by_type[selected_room] += 1
 			else: num_rooms_by_type[selected_room] = 1
@@ -194,7 +285,7 @@ func rotate_room(lvl: Array, x: int, y: int, room: RoomData, rng: RandomNumberGe
 		if i | i_room == i_room: valid_rots.push_back(j * 90)
 		i_room >>= 1
 	if valid_rots.is_empty():
-		push_error("no valid rotations ", i, " ", i_room)
+		push_error("no valid rotations ", i, " ", i_room, " for room ", room)
 		return 0
 	var v = valid_rots[rng.randi_range(0, valid_rots.size() - 1)]
 	if v < 0: return 360 - v
@@ -302,12 +393,8 @@ func determine_next_dir(pos: Vector2i, cur_dir: Vector2i, rng: RandomNumberGener
 		return Vector2i(-dir.x, -dir.y)
 	return dir
 
-### Returns the preferred room type
-func rooms_for_pos(n: int, x: int, y: int, rooms: Array[RoomData]) -> RoomData.RoomType:
-	var lvl = levels[n]
-	var preferred_room_type := RoomData.RoomType.Fourway
-	if lvl[x + y * width] == &"stair": preferred_room_type = RoomData.RoomType.Stairs
-	elif lvl[x + y * width] == &"stairend": return RoomData.RoomType.Stairs
+func room_type_at(lvl: Array, x: int, y: int) -> RoomData.RoomType:
+	if lvl[x + y * width] == &"stair" or lvl[x + y * width] == &"stairend": return RoomData.RoomType.Stairs
 	else:
 		var doors: Array[Vector2i] = []
 		for dir in dirs:
@@ -315,28 +402,34 @@ func rooms_for_pos(n: int, x: int, y: int, rooms: Array[RoomData]) -> RoomData.R
 			if pos.x < 0 || pos.y < 0 || pos.x >= width || pos.y >= width: continue
 			if lvl[pos.x + pos.y * width] == null: continue
 			doors.push_back(dir)
-		preferred_room_type = preferred_type(doors)
-	for room in all_rooms:
-		if !compatible(preferred_room_type, room.type): continue
-		if room.maximum_count > 0 && num_rooms_by_type.has(room) && num_rooms_by_type[room] >= room.maximum_count: continue
-		if room.probabilities.size() > 1 and room.probabilities[n] <= 0: continue
-		if room.cannot_border_tag.is_empty():
-			rooms.push_back(room)
-			continue
-		var is_valid = true
-		for dir in dirs:
+		return preferred_type(doors)
+
+func has_forbidden_neighbors(lvl: Array, x: int, y: int, room: RoomData) -> bool:
+	if room.cannot_border_tag.is_empty(): return false
+	for dir in dirs:
 			var pos = Vector2i(x + dir.x, y + dir.y)
 			if pos.x < 0 || pos.y < 0 || pos.x >= width || pos.y >= width: continue
 			var v = lvl[pos.x + pos.y * width]
 			if v == null || !is_instance_of(v, RoomData) || (v as RoomData).tag.is_empty(): continue
 			if room.cannot_border_tag.has((v as RoomData).tag):
-				is_valid = false
-				break
-		if !is_valid: continue
+				return true
+	return false
+
+### Returns the preferred room type
+func rooms_for_pos(n: int, x: int, y: int, rooms: Array[RoomData]) -> RoomData.RoomType:
+	var lvl = levels[n]
+	if lvl[x + y * width] == &"stairend": return RoomData.RoomType.Stairs
+	var preferred_room_type := room_type_at(lvl, x, y)
+	for room in all_rooms:
+		if !compatible(preferred_room_type, room.type): continue
+		if room.maximum_count > 0 && num_rooms_by_type.has(room) && num_rooms_by_type[room] >= room.maximum_count: continue
+		if room.probabilities.size() > 1 and room.probabilities[n] <= 0: continue
+		if has_forbidden_neighbors(lvl, x, y, room): continue
 		rooms.push_back(room)
 	
 	return preferred_room_type
 
+### if room of type b can be placed in a cell of type a
 func compatible(a: RoomData.RoomType, b: RoomData.RoomType) -> bool:
 	if b == RoomData.RoomType.Stairs: return a == b
 	match a:

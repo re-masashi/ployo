@@ -13,6 +13,14 @@
 [ext_resource type="Resource" uid="uid://bfdjs6ain5ofq" path="res://src/procgen/rooms/hallway.tres" id="11_1pekq"]
 [ext_resource type="Resource" uid="uid://cu3jswtte71ei" path="res://src/procgen/rooms/stairs.tres" id="12_ffcej"]
 [ext_resource type="Resource" uid="uid://cbvxph37w5ccg" path="res://src/procgen/rooms/threeway.tres" id="13_3vubs"]
+[ext_resource type="Resource" uid="uid://b7mmdbk5022ib" path="res://src/procgen/rooms/special/bilge.tres" id="14_u834y"]
+[ext_resource type="Resource" uid="uid://d0ibgh4iosq33" path="res://src/procgen/rooms/special/brig.tres" id="15_1vpcs"]
+[ext_resource type="Resource" uid="uid://cxhenhkx3h3el" path="res://src/procgen/rooms/special/electrical.tres" id="16_mqgew"]
+[ext_resource type="Resource" uid="uid://dvdwychia8cwc" path="res://src/procgen/rooms/special/engine.tres" id="17_r4b1s"]
+[ext_resource type="Resource" uid="uid://cts15p5s7mfxt" path="res://src/procgen/rooms/special/fuel.tres" id="18_6y7ov"]
+[ext_resource type="Resource" uid="uid://d176bqncc2u8n" path="res://src/procgen/rooms/special/galley.tres" id="19_lue8h"]
+[ext_resource type="Resource" uid="uid://ctapum56ebuns" path="res://src/procgen/rooms/special/medbay.tres" id="20_bcirq"]
+[ext_resource type="Resource" uid="uid://dexvw2hb4hbgc" path="res://src/procgen/rooms/special/storage.tres" id="21_hvhbd"]
 
 [sub_resource type="PanoramaSkyMaterial" id="PanoramaSkyMaterial_arena"]
 panorama = ExtResource("1_sky")
@@ -40,6 +48,7 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 100, 0)
 script = ExtResource("4_builder")
 
 [node name="Players" type="Node3D" parent="." unique_id=1580193348]
+unique_name_in_owner = true
 
 [node name="PlayerSpawner" type="MultiplayerSpawner" parent="." unique_id=1714187890]
 _spawnable_scenes = PackedStringArray("uid://cynn6fc46qob3")
@@ -49,6 +58,7 @@ spawn_path = NodePath("../Players")
 script = ExtResource("2_net")
 
 [node name="SpawnPoints" type="Node3D" parent="." unique_id=1640338479]
+unique_name_in_owner = true
 
 [node name="Spawn1" type="Marker3D" parent="SpawnPoints" unique_id=1650201503 groups=["spawn_points"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 42, 0.5, 84)
@@ -102,6 +112,14 @@ unique_name_in_owner = true
 script = ExtResource("5_fu4bq")
 door_scene = ExtResource("6_sbb53")
 all_rooms = Array[ExtResource("7_nb1nt")]([ExtResource("8_u834y"), ExtResource("9_w3v2p"), ExtResource("10_1s3fb"), ExtResource("11_1pekq"), ExtResource("12_ffcej"), ExtResource("13_3vubs")])
+bilge = ExtResource("14_u834y")
+brig = ExtResource("15_1vpcs")
+electrical = ExtResource("16_mqgew")
+engine = ExtResource("17_r4b1s")
+fuel = ExtResource("18_6y7ov")
+galley = ExtResource("19_lue8h")
+medbay = ExtResource("20_bcirq")
+storage = ExtResource("21_hvhbd")
 metadata/_custom_type_script = "uid://b443vky0yfe3p"
 
 [node name="Level" type="Node3D" parent="." unique_id=1201205971]
