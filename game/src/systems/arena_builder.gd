@@ -440,10 +440,10 @@ func _stage(kind: String, actions: Array) -> Dictionary:
 
 
 func _make_action(id: String, display: String, hold: float, hint: String,
-                  requires: Array[String] = [],
-                  accident_on_unguarded_begin: bool = false,
-                  accident_reason: String = "Mistake made.",
-                  accident_on_fail: bool = false) -> Dictionary:
+				  requires: Array[String] = [],
+				  accident_on_unguarded_begin: bool = false,
+				  accident_reason: String = "Mistake made.",
+				  accident_on_fail: bool = false) -> Dictionary:
 	return {
 		"id": id,
 		"display_name": display,

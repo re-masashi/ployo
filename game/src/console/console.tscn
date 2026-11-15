@@ -23,7 +23,19 @@ grow_begin = 0.0
 grow_end = 0.0
 thickness = 2
 
-[sub_resource type="Theme" id="Theme_3kpjo"]
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_3kpjo"]
+content_margin_left = 4.0
+content_margin_top = 4.0
+content_margin_right = 4.0
+content_margin_bottom = 4.0
+bg_color = Color(0.09411765, 0.09411765, 0.14509805, 1)
+border_color = Color(1, 1, 1, 0)
+corner_radius_top_left = 8
+corner_radius_top_right = 8
+corner_radius_bottom_right = 8
+corner_radius_bottom_left = 8
+
+[sub_resource type="Theme" id="Theme_wnr0t"]
 default_font_size = 14
 PanelContainer/styles/panel = SubResource("StyleBoxFlat_topmy")
 RichTextLabel/colors/default_color = Color(0.8039216, 0.8392157, 0.95686275, 1)
@@ -58,6 +70,7 @@ TextEdit/colors/selection_color = Color(0.5764706, 0.6, 0.69803923, 0.25)
 TextEdit/colors/word_highlighted_color = Color(0.5764706, 0.6, 0.69803923, 0.25)
 TextEdit/constants/caret_width = 2
 TextEdit/fonts/font = ExtResource("4_wnr0t")
+TooltipPanel/styles/panel = SubResource("StyleBoxFlat_3kpjo")
 
 [sub_resource type="GDScript" id="GDScript_juhpt"]
 
@@ -84,11 +97,16 @@ script = SubResource("GDScript_lyhuu")
 [sub_resource type="RichTextEffect" id="RichTextEffect_vv18m"]
 script = SubResource("GDScript_wnr0t")
 
+[sub_resource type="GDScript" id="GDScript_vv18m"]
+
+[sub_resource type="RichTextEffect" id="RichTextEffect_0ukvi"]
+script = SubResource("GDScript_vv18m")
+
 [sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_juhpt"]
 
 [sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_hef1m"]
 
-[sub_resource type="SyntaxHighlighter" id="SyntaxHighlighter_0ukvi"]
+[sub_resource type="SyntaxHighlighter" id="SyntaxHighlighter_upx8w"]
 script = ExtResource("3_hef1m")
 
 [node name="Console" type="Control" unique_id=1789354983]
@@ -98,7 +116,7 @@ anchor_right = 1.0
 anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
-theme = SubResource("Theme_3kpjo")
+theme = SubResource("Theme_wnr0t")
 script = ExtResource("1_rrraj")
 
 [node name="PanelContainer" type="PanelContainer" parent="." unique_id=1797372128]
@@ -122,7 +140,7 @@ theme_override_constants/text_highlight_h_padding = 0
 theme_override_constants/text_highlight_v_padding = 0
 scroll_following = true
 autowrap_mode = 0
-custom_effects = [SubResource("RichTextEffect_hef1m"), SubResource("RichTextEffect_d0rfm"), SubResource("RichTextEffect_topmy"), SubResource("RichTextEffect_swuks"), SubResource("RichTextEffect_vv18m")]
+custom_effects = [SubResource("RichTextEffect_hef1m"), SubResource("RichTextEffect_d0rfm"), SubResource("RichTextEffect_topmy"), SubResource("RichTextEffect_swuks"), SubResource("RichTextEffect_vv18m"), SubResource("RichTextEffect_0ukvi")]
 selection_enabled = true
 script = ExtResource("2_wyc7o")
 metadata/_custom_type_script = "uid://dbkslocdpdqcd"
@@ -132,7 +150,7 @@ layout_mode = 2
 
 [node name="CommandInput" type="CodeEdit" parent="PanelContainer/VBoxContainer" unique_id=195492338]
 unique_name_in_owner = true
-custom_minimum_size = Vector2(0, 118)
+custom_minimum_size = Vector2(0, 117.75157)
 layout_mode = 2
 theme_override_styles/normal = SubResource("StyleBoxEmpty_juhpt")
 theme_override_styles/focus = SubResource("StyleBoxEmpty_hef1m")
@@ -141,7 +159,7 @@ caret_blink = true
 use_default_word_separators = false
 use_custom_word_separators = true
 custom_word_separators = "!\"#%&'()*+,-./:;<=>?@[\\]^`{|}~"
-syntax_highlighter = SubResource("SyntaxHighlighter_0ukvi")
+syntax_highlighter = SubResource("SyntaxHighlighter_upx8w")
 highlight_all_occurrences = true
 gutters_draw_line_numbers = true
 delimiter_strings = Array[String](["\" \""])

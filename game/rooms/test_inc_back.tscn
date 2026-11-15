@@ -1,0 +1,13 @@
+[gd_scene format=3 uid="uid://dfyrin10t22j7"]
+
+[ext_resource type="Script" uid="uid://ckxj7ynpe0qs0" path="res://src/vertebrae_node.gd" id="1_1nyvd"]
+
+[node name="TestIncCap" type="Node3D" unique_id=905890361]
+script = ExtResource("1_1nyvd")
+metadata/_custom_type_script = "uid://ckxj7ynpe0qs0"
+
+[node name="CSGPolygon3D" type="CSGPolygon3D" parent="." unique_id=1782582514]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -1, -0.5, 1)
+flip_faces = true
+polygon = PackedVector2Array(0, 1, 2, 1, 2, 0)
+depth = 2.0

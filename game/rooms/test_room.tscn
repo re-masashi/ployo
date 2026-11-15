@@ -1,0 +1,12 @@
+[gd_scene format=3 uid="uid://boyh411pksrxw"]
+
+[ext_resource type="Script" uid="uid://ckxj7ynpe0qs0" path="res://src/vertebrae_node.gd" id="1_5k1p0"]
+
+[node name="TestRoom" type="Node3D" unique_id=1536239962]
+script = ExtResource("1_5k1p0")
+size = Vector3i(2, 1, 2)
+metadata/_custom_type_script = "uid://ckxj7ynpe0qs0"
+
+[node name="CSGBox3D" type="CSGBox3D" parent="." unique_id=1611234657]
+transform = Transform3D(2, 0, 0, 0, 1, 0, 0, 0, 2, 0, 0, 0)
+flip_faces = true

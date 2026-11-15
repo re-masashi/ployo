@@ -26,7 +26,7 @@ script = ExtResource("1_crew")
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.85, 0)
 shape = SubResource("CapsuleShape_crew")
 
-[node name="Visual" type="Node3D" parent="."]
+[node name="Visual" type="Node3D" parent="." unique_id=1145363955]
 
 [node name="Model" type="Node3D" parent="Visual" unique_id=485978704]
 transform = Transform3D(0.3, 0, 0, 0, 0.3, 0, 0, 0, 0.3, 0, -0.64241236, 0)
@@ -39,7 +39,6 @@ transform = Transform3D(0.99999976, 0, 0, 0, 0.99999976, 0, 0, 0, 0.99999976, 0,
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.15, 0)
 pixel_size = 0.01
 billboard = 1
-no_depth_test = false
 text = "Crew"
 font_size = 48
 

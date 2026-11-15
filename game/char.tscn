@@ -1,0 +1,57 @@
+[gd_scene format=3 uid="uid://cblxu0vq0trbp"]
+
+[ext_resource type="PackedScene" uid="uid://dwt54viglddjv" path="res://assets/models/char2.glb" id="1_njpxk"]
+[ext_resource type="Script" uid="uid://bxenx4ix5s6tn" path="res://src/char_anim.gd" id="2_hs5vj"]
+
+[node name="char2" unique_id=1159646889 instance=ExtResource("1_njpxk")]
+transform = Transform3D(0.3, 0, 0, 0, 0.3, 0, 0, 0, 0.3, 0, 1.3634228, 0)
+script = ExtResource("2_hs5vj")
+
+[node name="Skeleton3D" parent="Armature" parent_id_path=PackedInt32Array(822903707) index="0" unique_id=1534545644]
+bones/12/position = Vector3(-9.5109264e-08, 0.01506798, -0.38908228)
+bones/12/rotation = Quaternion(0.99919707, -0.021139015, -0.00042455306, -0.034032643)
+bones/12/scale = Vector3(1, 0.99999994, 1)
+bones/13/rotation = Quaternion(0.99685484, 0.064795375, 0.0030004391, -0.045530364)
+
+[node name="mesh" parent="Armature/Skeleton3D" index="0" unique_id=330467693]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.020394802, 0.025974274, 0.01533401)
+
+[node name="LeftLegLookAt" type="LookAtModifier3D" parent="Armature/Skeleton3D" index="1" unique_id=825946337]
+target_node = NodePath("../../../LFootTarget")
+bone_name = "leg.L"
+bone = 12
+forward_axis = 2
+primary_rotation_axis = 0
+duration = 2.0
+transition_type = 1
+
+[node name="RightLegLookAt" type="LookAtModifier3D" parent="Armature/Skeleton3D" index="2" unique_id=1996411152]
+target_node = NodePath("../../../RFootTarget")
+bone_name = "leg.R"
+bone = 13
+forward_axis = 2
+primary_rotation_axis = 0
+duration = 2.0
+transition_type = 1
+
+[node name="LFootTarget" type="Marker3D" parent="." index="2" unique_id=175266681]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 0.32003725, 0, 0, -0.13)
+top_level = true
+
+[node name="RFootTarget" type="Marker3D" parent="." index="3" unique_id=1441011901]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 0.32003725, 0, 0, 0.13)
+top_level = true
+
+[node name="LFootIdeal" type="Marker3D" parent="." index="4" unique_id=1084188353]
+transform = Transform3D(3.333333, 0, 0, 0, 3.333333, 0, 0, 0, 1.0667907, 0, -4.544742, -0.43333328)
+
+[node name="RFootIdeal" type="Marker3D" parent="." index="5" unique_id=1287880547]
+transform = Transform3D(3.333333, 0, 0, 0, 3.333333, 0, 0, 0, 1.0667907, 0, -4.544742, 0.43333328)
+
+[node name="RCast" type="RayCast3D" parent="." index="6" unique_id=159560111]
+transform = Transform3D(0.99999976, 0, 0, 0, 0.99999976, 0, 0, 0, 0.99999976, 0, -3.7620378, 0.44032967)
+target_position = Vector3(0, -1.9977801, 0.06659562)
+
+[node name="LCast" type="RayCast3D" parent="." index="7" unique_id=1142460138]
+transform = Transform3D(0.99999976, 0, 0, 0, 0.99999976, 0, 0, 0, 0.99999976, 0, -3.762, -0.44)
+target_position = Vector3(0, -1.9977801, -0.06659562)

@@ -1,0 +1,13 @@
+[gd_scene format=3 uid="uid://650mfdwhafpp"]
+
+[ext_resource type="Script" uid="uid://ckxj7ynpe0qs0" path="res://src/vertebrae_node.gd" id="1_fnpya"]
+
+[node name="TestDecCap" type="Node3D" unique_id=1853169803]
+script = ExtResource("1_fnpya")
+metadata/_custom_type_script = "uid://ckxj7ynpe0qs0"
+
+[node name="CSGPolygon3D" type="CSGPolygon3D" parent="." unique_id=1055615320]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -1, -0.5, 1)
+flip_faces = true
+polygon = PackedVector2Array(0, 0, 2, 0, 0, 1)
+depth = 2.0

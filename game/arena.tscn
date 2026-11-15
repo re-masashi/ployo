@@ -21,6 +21,7 @@
 [ext_resource type="Resource" uid="uid://d176bqncc2u8n" path="res://src/procgen/rooms/special/galley.tres" id="19_lue8h"]
 [ext_resource type="Resource" uid="uid://ctapum56ebuns" path="res://src/procgen/rooms/special/medbay.tres" id="20_bcirq"]
 [ext_resource type="Resource" uid="uid://dexvw2hb4hbgc" path="res://src/procgen/rooms/special/storage.tres" id="21_hvhbd"]
+[ext_resource type="PackedScene" uid="uid://bkqyldpsgw3vr" path="res://shipgen/shipgen.tscn" id="22_mqgew"]
 
 [sub_resource type="PanoramaSkyMaterial" id="PanoramaSkyMaterial_arena"]
 panorama = ExtResource("1_sky")
@@ -121,6 +122,9 @@ galley = ExtResource("19_lue8h")
 medbay = ExtResource("20_bcirq")
 storage = ExtResource("21_hvhbd")
 metadata/_custom_type_script = "uid://b443vky0yfe3p"
+
+[node name="Shipgen" parent="." unique_id=641481884 instance=ExtResource("22_mqgew")]
+unique_name_in_owner = true
 
 [node name="Level" type="Node3D" parent="." unique_id=1201205971]
 unique_name_in_owner = true
