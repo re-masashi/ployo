@@ -5,25 +5,45 @@
 [ext_resource type="PackedScene" uid="uid://boyh411pksrxw" path="res://rooms/test_room.tscn" id="2_ggteu"]
 [ext_resource type="PackedScene" uid="uid://dfyrin10t22j7" path="res://rooms/test_inc_back.tscn" id="3_fb8rm"]
 [ext_resource type="PackedScene" uid="uid://bropnllvxu8kg" path="res://rooms/test_inc_cap.tscn" id="4_mwh2j"]
-[ext_resource type="PackedScene" uid="uid://gnvcvtyxb8bn" path="res://rooms/test_dec_back.tscn" id="4_ric83"]
 [ext_resource type="PackedScene" uid="uid://650mfdwhafpp" path="res://rooms/test_dec_cap.tscn" id="5_7neh4"]
+[ext_resource type="PackedScene" uid="uid://boxhrm31awg4l" path="res://rooms/test_double_hall.tscn" id="6_6ybkp"]
+[ext_resource type="PackedScene" uid="uid://c5amqv5yfsbfv" path="res://rooms/test_hall.tscn" id="6_ric83"]
 
 [sub_resource type="Resource" id="Resource_1nyvd"]
 script = ExtResource("2_bu8ex")
 scene = ExtResource("3_fb8rm")
 size = Vector3i(2, 1, 2)
-metadata/_custom_type_script = "uid://bdpm2b6gkjfi2"
-
-[sub_resource type="Resource" id="Resource_68jlo"]
-script = ExtResource("2_bu8ex")
-scene = ExtResource("4_ric83")
-size = Vector3i(2, 1, 2)
+front_tag = "hall"
 metadata/_custom_type_script = "uid://bdpm2b6gkjfi2"
 
 [sub_resource type="Resource" id="Resource_hctk8"]
 script = ExtResource("2_bu8ex")
 scene = ExtResource("2_ggteu")
 size = Vector3i(2, 1, 2)
+front_tag = "double hall"
+back_tag = "hall"
+metadata/_custom_type_script = "uid://bdpm2b6gkjfi2"
+
+[sub_resource type="Resource" id="Resource_5q8nx"]
+script = ExtResource("2_bu8ex")
+scene = ExtResource("6_ric83")
+size = Vector3i(2, 1, 2)
+front_tag = "hall"
+back_tag = "hall"
+metadata/_custom_type_script = "uid://bdpm2b6gkjfi2"
+
+[sub_resource type="Resource" id="Resource_r032o"]
+script = ExtResource("2_bu8ex")
+scene = ExtResource("6_6ybkp")
+front_tag = "double hall"
+back_tag = "double hall"
+metadata/_custom_type_script = "uid://bdpm2b6gkjfi2"
+
+[sub_resource type="Resource" id="Resource_smrjn"]
+script = ExtResource("2_bu8ex")
+scene = ExtResource("2_ggteu")
+front_tag = "hall"
+back_tag = "double hall"
 metadata/_custom_type_script = "uid://bdpm2b6gkjfi2"
 
 [sub_resource type="Resource" id="Resource_bu8ex"]
@@ -41,7 +61,6 @@ metadata/_custom_type_script = "uid://bdpm2b6gkjfi2"
 [node name="Shipgen" type="Node" unique_id=641481884]
 script = ExtResource("1_1cnc2")
 back_inc = Array[ExtResource("2_bu8ex")]([SubResource("Resource_1nyvd")])
-back_dec = Array[ExtResource("2_bu8ex")]([SubResource("Resource_68jlo")])
-vertabrae = Array[ExtResource("2_bu8ex")]([SubResource("Resource_hctk8")])
+vertabrae = Array[ExtResource("2_bu8ex")]([SubResource("Resource_hctk8"), SubResource("Resource_5q8nx"), SubResource("Resource_r032o"), SubResource("Resource_smrjn")])
 front_inc = Array[ExtResource("2_bu8ex")]([SubResource("Resource_bu8ex")])
 front_dec = Array[ExtResource("2_bu8ex")]([SubResource("Resource_fnpya")])
