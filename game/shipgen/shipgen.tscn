@@ -50,6 +50,13 @@ metadata/_custom_type_script = "uid://bdpm2b6gkjfi2"
 script = ExtResource("2_bu8ex")
 scene = ExtResource("4_mwh2j")
 size = Vector3i(2, 1, 2)
+back_tag = "double hall"
+metadata/_custom_type_script = "uid://bdpm2b6gkjfi2"
+
+[sub_resource type="Resource" id="Resource_ric83"]
+script = ExtResource("2_bu8ex")
+scene = ExtResource("4_mwh2j")
+back_tag = "hall"
 metadata/_custom_type_script = "uid://bdpm2b6gkjfi2"
 
 [sub_resource type="Resource" id="Resource_fnpya"]
@@ -62,5 +69,5 @@ metadata/_custom_type_script = "uid://bdpm2b6gkjfi2"
 script = ExtResource("1_1cnc2")
 back_inc = Array[ExtResource("2_bu8ex")]([SubResource("Resource_1nyvd")])
 vertabrae = Array[ExtResource("2_bu8ex")]([SubResource("Resource_hctk8"), SubResource("Resource_5q8nx"), SubResource("Resource_r032o"), SubResource("Resource_smrjn")])
-front_inc = Array[ExtResource("2_bu8ex")]([SubResource("Resource_bu8ex")])
+front_inc = Array[ExtResource("2_bu8ex")]([SubResource("Resource_bu8ex"), SubResource("Resource_ric83")])
 front_dec = Array[ExtResource("2_bu8ex")]([SubResource("Resource_fnpya")])

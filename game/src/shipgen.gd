@@ -23,8 +23,7 @@ func pick_matching_vtag(tag: String, of: Array[Segment]) -> Segment:
 func pick_matching(vtag: String, htag: String, of: Array[Segment]) -> Segment:
 	return pick_matching_htag(
 		htag,
-		of.filter(func(vert: Segment): return vert.bottom_tag == vtag)\
-		.pick_random(),
+		of.filter(func(vert: Segment): return vert.bottom_tag == vtag),
 	)
 
 func generate_ship_spine() -> Spine:
@@ -52,12 +51,20 @@ func generate_ship_spine() -> Spine:
 			floor_spine.append(cap)
 			spine.x_sizes.append(cap.size.x)
 		elif i <= increase:
-			var back: Segment = vertabrae.pick_random()
+			var back: Segment = pick_matching_vtag(
+				spine.spine[i - 1][0].top_tag,
+				vertabrae,
+			)
+			var tag := back.front_tag
 			spine.y_sizes.append(back.size.y)
 			floor_spine.append(back)
 			for j in floor_spine_size:
-				floor_spine.append(vertabrae.pick_random())
-			floor_spine.append(front_inc.pick_random())
+				floor_spine.append(pick_matching(
+					spine.spine[i - 1][0].top_tag,
+					tag,
+					vertabrae,
+				))
+			floor_spine.append(pick_matching_htag(tag, front_inc))
 		elif i <= decrease:
 			var back: Segment = vertabrae.pick_random()
 			spine.y_sizes.append(back.size.y)
